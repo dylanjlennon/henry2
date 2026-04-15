@@ -9,3 +9,5 @@ coverage/
 *.log
 tmp/
 cache/
+vitest.config.ts.timestamp-*.mjs
+apply_migration.mjs

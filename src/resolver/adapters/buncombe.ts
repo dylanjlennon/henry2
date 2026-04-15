@@ -10,7 +10,14 @@
  */
 
 import { httpJson } from '../../lib/http.ts';
+import type { ProvenanceRecorder } from '../../provenance/recorder.ts';
 import type { NormalizedAddress } from '../normalizeAddress.ts';
+
+/** Optional provenance hooks — when present, every HTTP hit gets recorded. */
+export interface GisQueryOptions {
+  recorder?: ProvenanceRecorder;
+  fetcherCallId?: string | null;
+}
 
 const PARCEL_URL =
   'https://gis.buncombecounty.org/arcgis/rest/services/opendata/FeatureServer/1/query';
@@ -61,7 +68,10 @@ export interface AddressHit {
 }
 
 /** Look up a parcel by its 15-digit GIS PIN. */
-export async function lookupParcelByPin(gisPin: string): Promise<ParcelHit | null> {
+export async function lookupParcelByPin(
+  gisPin: string,
+  opts: GisQueryOptions = {},
+): Promise<ParcelHit | null> {
   // The PIN field type varies by deployment — sometimes string, sometimes
   // numeric. Try several WHERE shapes until one returns a feature.
   const numericPin = Number.isSafeInteger(Number(gisPin)) ? Number(gisPin) : null;
@@ -79,7 +89,11 @@ export async function lookupParcelByPin(gisPin: string): Promise<ParcelHit | nul
       f: 'json',
     })}`;
     try {
-      const data = await httpJson<ArcGisResponse<ParcelAttributes>>(url);
+      const data = await httpJson<ArcGisResponse<ParcelAttributes>>(url, {
+        recorder: opts.recorder,
+        fetcherCallId: opts.fetcherCallId ?? null,
+        sourceLabel: 'buncombe.parcel',
+      });
       if (data.error) continue;
       const f = data.features?.[0];
       if (f) return { attributes: f.attributes, geometry: f.geometry, centroid: pickCentroid(f.geometry) };
@@ -95,7 +109,11 @@ export async function lookupParcelByPin(gisPin: string): Promise<ParcelHit | nul
  * Used when the address-point layer doesn't carry a PIN directly — we use
  * the address point's geometry to find which parcel it sits inside.
  */
-export async function lookupParcelByPoint(lon: number, lat: number): Promise<ParcelHit | null> {
+export async function lookupParcelByPoint(
+  lon: number,
+  lat: number,
+  opts: GisQueryOptions = {},
+): Promise<ParcelHit | null> {
   const geometry = JSON.stringify({ x: lon, y: lat, spatialReference: { wkid: 4326 } });
   const url = `${PARCEL_URL}?${new URLSearchParams({
     where: '1=1',
@@ -108,7 +126,11 @@ export async function lookupParcelByPoint(lon: number, lat: number): Promise<Par
     outSR: '4326',
     f: 'json',
   })}`;
-  const data = await httpJson<ArcGisResponse<ParcelAttributes>>(url);
+  const data = await httpJson<ArcGisResponse<ParcelAttributes>>(url, {
+    recorder: opts.recorder,
+    fetcherCallId: opts.fetcherCallId ?? null,
+    sourceLabel: 'buncombe.parcel',
+  });
   if (data.error) throw new Error(`GIS parcel spatial error: ${data.error.message}`);
   const f = data.features?.[0];
   if (!f) return null;
@@ -121,6 +143,7 @@ export async function lookupParcelByPoint(lon: number, lat: number): Promise<Par
  */
 export async function searchAddress(
   normalized: NormalizedAddress,
+  opts: GisQueryOptions = {},
 ): Promise<AddressHit[]> {
   const attempts: string[] = [];
 
@@ -154,7 +177,11 @@ export async function searchAddress(
       resultRecordCount: '20',
     })}`;
     try {
-      const data = await httpJson<ArcGisResponse<AddressAttributes>>(url);
+      const data = await httpJson<ArcGisResponse<AddressAttributes>>(url, {
+        recorder: opts.recorder,
+        fetcherCallId: opts.fetcherCallId ?? null,
+        sourceLabel: 'buncombe.address',
+      });
       if (data.error) continue; // try next form
       const features = data.features ?? [];
       if (features.length > 0) {

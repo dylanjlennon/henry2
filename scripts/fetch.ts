@@ -3,14 +3,19 @@
  * CLI: tsx scripts/fetch.ts "<address or PIN>"
  *
  * Resolves the property, runs all fetchers, prints progress + a final
- * summary. Mirrors what the Slack bot will do.
+ * summary. Mirrors what the Slack bot does, including full provenance
+ * recording (default backend: in-memory + filesystem, so no DB required).
  */
 
+import { randomUUID } from 'node:crypto';
 import { resolveProperty } from '../src/resolver/index.ts';
 import { runFetchers } from '../src/orchestrator/index.ts';
 import { ALL_FETCHERS } from '../src/orchestrator/fetchers.ts';
 import { join } from 'node:path';
 import { cwd } from 'node:process';
+import { makeProvenanceStack } from '../src/provenance/factory.ts';
+import { ProvenanceRecorder } from '../src/provenance/recorder.ts';
+import { canonicalToSnapshot } from '../src/provenance/snapshot.ts';
 
 const raw = process.argv.slice(2).join(' ').trim();
 if (!raw) {
@@ -27,42 +32,68 @@ try {
   if (property.address) console.error(`[henry] Address: ${property.address}`);
   if (property.ownerName) console.error(`[henry] Owner: ${property.ownerName}`);
 
-  const summary = await runFetchers(ALL_FETCHERS, property, {
-    outRoot,
-    onProgress: (ev) => {
-      const suffix = ev.file ? ` → ${ev.file}` : ev.message ? ` ${ev.message}` : '';
-      console.error(`[${ev.fetcher}] ${ev.status}${suffix}`);
+  const { store, artifactStore, backendLabel } = await makeProvenanceStack();
+  const recorder = new ProvenanceRecorder({
+    store,
+    artifactStore,
+    invocation: {
+      id: randomUUID(),
+      trigger: 'cli',
+      slackTeamId: null,
+      slackUserId: null,
+      slackChannelId: null,
+      slackChannelName: null,
+      slackThreadTs: null,
+      rawInput: raw,
+      createdAt: new Date().toISOString(),
     },
   });
+  await recorder.saveInvocation();
+  await recorder.startRun(canonicalToSnapshot(property));
+  console.error(`[henry] Provenance: ${backendLabel}, runId=${recorder.runId}`);
 
-  console.error('');
-  console.error(`[henry] Done in ${summary.durationMs}ms — ${summary.totals.completed}/${summary.totals.total} fetchers OK, ${summary.totals.filesProduced} files`);
-  console.error(`[henry] Output dir: ${summary.outDir}`);
-  // Print structured summary to stdout (for piping / parsing)
-  console.log(JSON.stringify(
-    {
-      runId: summary.runId,
-      property: {
-        pin: property.pin,
-        address: property.address,
-        ownerName: property.ownerName,
-        deed: property.deed,
-        plat: property.plat,
+  let status: 'completed' | 'partial' | 'failed' = 'completed';
+  try {
+    const summary = await runFetchers(ALL_FETCHERS, property, {
+      outRoot,
+      recorder,
+      onProgress: (ev) => {
+        const suffix = ev.file ? ` → ${ev.file}` : ev.message ? ` ${ev.message}` : '';
+        console.error(`[${ev.fetcher}] ${ev.status}${suffix}`);
       },
-      outDir: summary.outDir,
-      totals: summary.totals,
-      results: summary.results.map((r) => ({
-        fetcher: r.fetcher,
-        status: r.status,
-        files: r.files.map((f) => f.path),
-        data: r.data,
-        error: r.error,
-        durationMs: r.durationMs,
-      })),
-    },
-    null,
-    2,
-  ));
+    });
+    if (summary.totals.failed > 0) status = summary.totals.completed > 0 ? 'partial' : 'failed';
+
+    console.error('');
+    console.error(`[henry] Done in ${summary.durationMs}ms — ${summary.totals.completed}/${summary.totals.total} fetchers OK, ${summary.totals.filesProduced} files`);
+    console.error(`[henry] Output dir: ${summary.outDir}`);
+    console.log(JSON.stringify(
+      {
+        runId: summary.runId,
+        property: {
+          pin: property.pin,
+          address: property.address,
+          ownerName: property.ownerName,
+          deed: property.deed,
+          plat: property.plat,
+        },
+        outDir: summary.outDir,
+        totals: summary.totals,
+        results: summary.results.map((r) => ({
+          fetcher: r.fetcher,
+          status: r.status,
+          files: r.files.map((f) => f.path),
+          data: r.data,
+          error: r.error,
+          durationMs: r.durationMs,
+        })),
+      },
+      null,
+      2,
+    ));
+  } finally {
+    await recorder.finishRun({ status });
+  }
 } catch (err) {
   console.error('[henry] FAILED:', err instanceof Error ? err.message : String(err));
   process.exit(2);

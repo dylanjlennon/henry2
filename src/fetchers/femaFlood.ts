@@ -3,7 +3,7 @@
  *
  * Two spatial queries:
  *   1. Flood Hazard Zones (layer 28) → zone code, BFE, SFHA flag
- *   2. FIRM Panels (layer 16)        → panel ID for FIRMette generation later
+ *   2. FIRM Panels (layer 3)        → panel ID for FIRMette generation later
  *
  * Pure REST. The actual FIRMette PDF is fetched by a separate browser
  * fetcher because msc.fema.gov requires a session.
@@ -41,13 +41,15 @@ export const femaFloodFetcher: Fetcher = {
     const t0 = Date.now();
     ctx.onProgress?.({ fetcher: this.id, status: 'started' });
     try {
-      if (!ctx.property.centroid) {
-        return skipped(this.id, 'No centroid available', t0);
-      }
+      if (!ctx.property.centroid) return skipped(this.id, 'No centroid available', t0);
       const { lon, lat } = ctx.property.centroid;
       const geometry = JSON.stringify({ x: lon, y: lat, spatialReference: { wkid: 4326 } });
+      const http = {
+        recorder: ctx.run.recorder,
+        fetcherCallId: ctx.run.fetcherCallId,
+        sourceLabel: 'fema.nfhl',
+      };
 
-      // Run both queries in parallel
       const [zoneRes, panelRes] = await Promise.all([
         httpJson<{ features?: Array<{ attributes: FloodZoneAttrs }>; error?: { message: string } }>(
           arcgisQueryUrl(SOURCES.femaNflhFloodZones, {
@@ -59,6 +61,7 @@ export const femaFloodFetcher: Fetcher = {
             outFields: 'FLD_ZONE,ZONE_SUBTY,SFHA_TF,STATIC_BFE,DEPTH,FLD_AR_ID',
             returnGeometry: 'false',
           }),
+          http,
         ),
         httpJson<{ features?: Array<{ attributes: FirmPanelAttrs }>; error?: { message: string } }>(
           arcgisQueryUrl(SOURCES.femaNflhFirmPanels, {
@@ -70,6 +73,7 @@ export const femaFloodFetcher: Fetcher = {
             outFields: 'FIRM_PAN,PANEL,EFF_DATE,PANEL_TYP',
             returnGeometry: 'false',
           }),
+          http,
         ),
       ]);
 
@@ -89,9 +93,20 @@ export const femaFloodFetcher: Fetcher = {
         firmPanelEffectiveDate: panel?.EFF_DATE,
       };
 
+      const bytes = Buffer.from(JSON.stringify({ summary, raw: { zone, panel } }, null, 2), 'utf8');
+      const filename = `fema-flood-${ctx.property.gisPin}.json`;
+      const artifact = await ctx.run.recorder.putArtifact({
+        fetcherCallId: ctx.run.fetcherCallId,
+        label: 'FEMA flood data (JSON)',
+        filename,
+        contentType: 'application/json',
+        bytes,
+        sourceUrl: SOURCES.femaNflhFloodZones,
+      });
+
       await mkdir(ctx.outDir, { recursive: true });
-      const path = join(ctx.outDir, `fema-flood-${ctx.property.gisPin}.json`);
-      await writeFile(path, JSON.stringify({ summary, raw: { zone, panel } }, null, 2));
+      const path = join(ctx.outDir, filename);
+      await writeFile(path, bytes);
 
       ctx.onProgress?.({
         fetcher: this.id,
@@ -104,7 +119,7 @@ export const femaFloodFetcher: Fetcher = {
         fetcher: this.id,
         status: 'completed',
         files: [{ path, label: 'FEMA flood data (JSON)', contentType: 'application/json' }],
-        data: summary,
+        data: { ...summary, artifactId: artifact.id, artifactSha256: artifact.sha256 },
         durationMs: Date.now() - t0,
       };
     } catch (err) {

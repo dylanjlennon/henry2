@@ -7,28 +7,40 @@
  *      - explicit argument text wins
  *      - otherwise fall back to channel-name inference
  *      - otherwise ask the user for input
- *   2. Posts an initial "on it" message (with thread_ts anchor)
- *   3. Kicks off the orchestrator in the background
- *   4. Streams progress to the thread, uploads produced files when done
+ *   2. Opens an Invocation + Run in the provenance store.
+ *   3. Posts an initial "on it" message (with thread_ts anchor).
+ *   4. Kicks off the orchestrator; every fetcher, HTTP call, and produced
+ *      artifact is recorded automatically.
+ *   5. Streams progress to the thread, uploads produced files when done.
+ *   6. Posts a summary line including the permanent run-trace URL.
  *
  * This module is transport-agnostic — it doesn't know whether Slack gave
  * us a slash command or a mention. That keeps it testable in isolation.
  */
 
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import type { WebClient } from '@slack/web-api';
 import { resolveProperty, ResolveError } from '../resolver/index.ts';
 import { runFetchers } from '../orchestrator/index.ts';
 import { ALL_FETCHERS } from '../orchestrator/fetchers.ts';
 import { inferPropertyFromChannelName } from './channelName.ts';
 import { log } from '../lib/log.ts';
-import { looksLikePin } from '../resolver/pin.ts';
 import type { CanonicalProperty, ProgressEvent } from '../types.ts';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { makeProvenanceStack } from '../provenance/factory.ts';
+import { ProvenanceRecorder } from '../provenance/recorder.ts';
+import { canonicalToSnapshot } from '../provenance/snapshot.ts';
+import type { Invocation } from '../provenance/schema.ts';
 
 export interface InvocationInput {
   /** Raw user-provided text ("" if none) */
   text: string;
+  /** 'slack-slash' | 'slack-mention' */
+  trigger: 'slack-slash' | 'slack-mention';
+  /** Slack team id (T…) */
+  teamId?: string;
   /** Channel the invocation came from */
   channelId: string;
   /** Channel NAME (e.g. "546-old-haw-creek-rd") — used for auto-detect */
@@ -42,6 +54,7 @@ export interface InvocationInput {
 }
 
 const OUT_ROOT = process.env.OUT_ROOT ?? join(tmpdir(), 'henry-runs');
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL ?? '';
 
 export async function handleHenryInvocation(input: InvocationInput): Promise<void> {
   const { text, channelId, channelName, userId, slack } = input;
@@ -58,7 +71,25 @@ export async function handleHenryInvocation(input: InvocationInput): Promise<voi
     return;
   }
 
-  // 2. Post initial "on it" and capture thread_ts to reply in
+  // 2. Provenance: open an Invocation row now (before we even resolve).
+  const { store, artifactStore, backendLabel } = await makeProvenanceStack();
+  const invocation: Invocation = {
+    id: randomUUID(),
+    trigger: input.trigger,
+    slackTeamId: input.teamId ?? null,
+    slackUserId: userId,
+    slackChannelId: channelId,
+    slackChannelName: channelName ?? null,
+    slackThreadTs: input.threadTs ?? null,
+    rawInput: propertyInput.raw,
+    createdAt: new Date().toISOString(),
+  };
+  const recorder = new ProvenanceRecorder({ store, artifactStore, invocation });
+  await recorder.saveInvocation();
+  const hlog = log.child({ runId: recorder.runId, invocationId: invocation.id, backend: backendLabel });
+  hlog.info('invocation_received', { raw: propertyInput.raw, source: propertyInput.source });
+
+  // 3. Post initial "on it" and capture thread_ts to reply in
   const posted = await slack.chat.postMessage({
     channel: channelId,
     thread_ts: input.threadTs,
@@ -68,7 +99,7 @@ export async function handleHenryInvocation(input: InvocationInput): Promise<voi
   });
   const threadTs = input.threadTs ?? (posted.ts as string);
 
-  // 3. Resolve
+  // 4. Resolve
   let property: CanonicalProperty;
   try {
     property = await resolveProperty({ raw: propertyInput.raw, county: 'buncombe' });
@@ -79,17 +110,20 @@ export async function handleHenryInvocation(input: InvocationInput): Promise<voi
       thread_ts: threadTs,
       text: `:x: Couldn't resolve *${propertyInput.raw}*: ${msg}`,
     });
+    hlog.warn('resolve_failed', { err: msg });
     return;
   }
+
+  await recorder.startRun(canonicalToSnapshot(property));
 
   await slack.chat.postMessage({
     channel: channelId,
     thread_ts: threadTs,
-    text: renderResolved(property),
+    text: renderResolved(property, recorder.runId),
     mrkdwn: true,
   });
 
-  // 4. Run fetchers with progress updates
+  // 5. Run fetchers with progress updates
   const progressLines: string[] = [];
   let lastPostTs: string | undefined;
   const flushProgress = async (): Promise<void> => {
@@ -107,30 +141,46 @@ export async function handleHenryInvocation(input: InvocationInput): Promise<voi
     const emoji = progressEmoji(ev.status);
     const suffix = ev.message ? ` — ${ev.message}` : ev.error ? ` — ${ev.error}` : '';
     progressLines.push(`${emoji} *${ev.fetcher}*${suffix}`);
-    // Fire and forget; intentional
-    flushProgress().catch((e) => log.warn('progress_flush_failed', { err: String(e) }));
+    flushProgress().catch((e) => hlog.warn('progress_flush_failed', { err: String(e) }));
   };
 
-  const summary = await runFetchers(ALL_FETCHERS, property, {
-    outRoot: OUT_ROOT,
-    onProgress,
-  });
+  let runStatus: 'completed' | 'partial' | 'failed' = 'completed';
+  try {
+    const summary = await runFetchers(ALL_FETCHERS, property, {
+      outRoot: OUT_ROOT,
+      onProgress,
+      recorder,
+    });
 
-  // 5. Upload produced files
-  const filesToUpload = summary.results.flatMap((r) =>
-    r.files.map((f) => ({ path: f.path, title: `${r.fetcher}: ${f.label}` })),
-  );
-  if (filesToUpload.length > 0) {
-    await uploadFiles(slack, channelId, threadTs, filesToUpload);
+    if (summary.totals.failed > 0) runStatus = summary.totals.completed > 0 ? 'partial' : 'failed';
+
+    // 6. Upload produced files
+    const filesToUpload = summary.results.flatMap((r) =>
+      r.files.map((f) => ({ path: f.path, title: `${r.fetcher}: ${f.label}` })),
+    );
+    if (filesToUpload.length > 0) {
+      await uploadFiles(slack, channelId, threadTs, filesToUpload);
+    }
+
+    // 7. Final summary
+    await slack.chat.postMessage({
+      channel: channelId,
+      thread_ts: threadTs,
+      text: renderSummary(property, summary.totals, summary.durationMs, recorder.runId),
+      mrkdwn: true,
+    });
+  } catch (err) {
+    runStatus = 'failed';
+    hlog.error('run_error', { err: String(err) });
+    await slack.chat.postMessage({
+      channel: channelId,
+      thread_ts: threadTs,
+      text: `:x: Run failed: ${(err as Error).message}`,
+    });
+  } finally {
+    await recorder.finishRun({ status: runStatus });
+    hlog.info('run_closed', { status: runStatus });
   }
-
-  // 6. Final summary
-  await slack.chat.postMessage({
-    channel: channelId,
-    thread_ts: threadTs,
-    text: renderSummary(property, summary.totals, summary.durationMs),
-    mrkdwn: true,
-  });
 }
 
 function chooseInput(
@@ -170,13 +220,18 @@ function progressEmoji(status: ProgressEvent['status']): string {
   }
 }
 
-function renderResolved(p: CanonicalProperty): string {
+function renderResolved(p: CanonicalProperty, runId: string): string {
   const lines = [`:pushpin: *${p.pin}*`];
   if (p.address) lines.push(`  • Address: ${p.address}`);
   if (p.ownerName) lines.push(`  • Owner: ${p.ownerName}`);
   if (p.deed) lines.push(`  • Deed: Book ${p.deed.book} Page ${p.deed.page}`);
   if (p.plat) lines.push(`  • Plat: Book ${p.plat.book} Page ${p.plat.page}`);
   lines.push(`  • Source: ${p.source} (confidence ${(p.confidence * 100).toFixed(0)}%)`);
+  if (PUBLIC_BASE_URL) {
+    lines.push(`  • Run: <${PUBLIC_BASE_URL}/api/runs/${runId}|${runId.slice(0, 8)}>`);
+  } else {
+    lines.push(`  • Run: \`${runId}\``);
+  }
   return lines.join('\n');
 }
 
@@ -184,11 +239,15 @@ function renderSummary(
   p: CanonicalProperty,
   totals: { completed: number; total: number; failed: number; filesProduced: number },
   durationMs: number,
+  runId: string,
 ): string {
   const secs = (durationMs / 1000).toFixed(1);
+  const traceLink = PUBLIC_BASE_URL
+    ? ` — <${PUBLIC_BASE_URL}/api/runs/${runId}|full trace>`
+    : ` — run \`${runId}\``;
   return (
     `:checkered_flag: Done for *${p.pin}* — ${totals.completed}/${totals.total} fetchers succeeded, ` +
-    `${totals.filesProduced} files attached, ${secs}s.${
+    `${totals.filesProduced} files attached, ${secs}s${traceLink}.${
       totals.failed > 0 ? ` _${totals.failed} fetcher(s) failed; see above._` : ''
     }`
   );
@@ -205,7 +264,8 @@ async function uploadFiles(
       await slack.filesUploadV2({
         channel_id: channel,
         thread_ts: threadTs,
-        file: f.path,
+        file: await readFile(f.path),
+        filename: f.path.split('/').pop() ?? 'file',
         title: f.title,
       });
     } catch (e) {

@@ -39,12 +39,35 @@ export interface CanonicalProperty {
 
 export interface FetcherContext {
   property: CanonicalProperty;
-  /** Where to write output files; absolute path */
+  /**
+   * Legacy scratch directory for fetchers that haven't migrated to
+   * ArtifactStore yet. Every produced file MUST still be registered as an
+   * Artifact via `ctx.run.recorder.putArtifact(...)` — outDir alone is not
+   * the source of truth anymore.
+   */
   outDir: string;
   /** Optional progress callback for streaming updates */
   onProgress?: (event: ProgressEvent) => void;
   /** Abort signal so individual fetches can be cancelled */
   signal?: AbortSignal;
+  /**
+   * Run-scoped provenance handles. Present in every real run; fetchers
+   * pass `run.recorder` to httpFetch so every external call is logged,
+   * and call `run.recorder.putArtifact(...)` for every produced file.
+   */
+  run: RunContext;
+}
+
+/**
+ * Run-scoped context threaded through the orchestrator into every fetcher.
+ * Correlates HTTP hits and artifacts back to the originating run + call.
+ */
+export interface RunContext {
+  runId: string;
+  fetcherCallId: string;
+  /** See src/provenance/recorder.ts. Typed as `unknown` here to avoid a
+   *  circular import from types.ts → provenance/recorder.ts → types.ts. */
+  recorder: import('./provenance/recorder.ts').ProvenanceRecorder;
 }
 
 export interface ProgressEvent {

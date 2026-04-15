@@ -28,6 +28,7 @@ async function readRawBody(req: VercelRequest): Promise<string> {
 
 interface SlackEvent {
   type: string;
+  team_id?: string;
   challenge?: string;
   event?: {
     type: string;
@@ -98,6 +99,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   handleHenryInvocation({
+    trigger: 'slack-mention',
+    teamId: body.team_id,
     text: ev.text ?? '',
     channelId: ev.channel,
     channelName,

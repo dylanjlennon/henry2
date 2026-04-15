@@ -31,23 +31,37 @@ export const septicFetcher: Fetcher = {
         geometry: JSON.stringify({ x: lon, y: lat, spatialReference: { wkid: 4326 } }),
         geometryType: 'esriGeometryPoint',
         inSR: '4326',
-        // Septic records are points, not polygons — buffer the query ~75m.
         distance: '75',
         units: 'esriSRUnit_Meter',
         spatialRel: 'esriSpatialRelIntersects',
         outFields: '*',
         returnGeometry: 'false',
       });
-      const res = await httpJson<{ features?: Array<{ attributes: Record<string, unknown> }>; error?: { message: string } }>(url);
+      const res = await httpJson<{ features?: Array<{ attributes: Record<string, unknown> }>; error?: { message: string } }>(url, {
+        recorder: ctx.run.recorder,
+        fetcherCallId: ctx.run.fetcherCallId,
+        sourceLabel: 'buncombe.septic',
+      });
       if (res.error) throw new Error(`septic query: ${res.error.message}`);
 
       const records = res.features ?? [];
       const onSeptic = records.length > 0;
       const summary = { onSeptic, records };
 
+      const bytes = Buffer.from(JSON.stringify(summary, null, 2), 'utf8');
+      const filename = `septic-${ctx.property.gisPin}.json`;
+      const artifact = await ctx.run.recorder.putArtifact({
+        fetcherCallId: ctx.run.fetcherCallId,
+        label: 'Septic data (JSON)',
+        filename,
+        contentType: 'application/json',
+        bytes,
+        sourceUrl: SOURCES.septicLayer,
+      });
+
       await mkdir(ctx.outDir, { recursive: true });
-      const path = join(ctx.outDir, `septic-${ctx.property.gisPin}.json`);
-      await writeFile(path, JSON.stringify(summary, null, 2));
+      const path = join(ctx.outDir, filename);
+      await writeFile(path, bytes);
 
       ctx.onProgress?.({
         fetcher: this.id,
@@ -60,7 +74,7 @@ export const septicFetcher: Fetcher = {
         fetcher: this.id,
         status: 'completed',
         files: [{ path, label: 'Septic data (JSON)', contentType: 'application/json' }],
-        data: summary,
+        data: { onSeptic, recordCount: records.length, artifactId: artifact.id, artifactSha256: artifact.sha256 },
         durationMs: Date.now() - t0,
       };
     } catch (err) {

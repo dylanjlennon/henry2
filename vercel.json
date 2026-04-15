@@ -8,6 +8,14 @@
     "api/slack/events.ts": {
       "maxDuration": 300,
       "memory": 1024
+    },
+    "api/runs/index.ts": {
+      "maxDuration": 30,
+      "memory": 512
+    },
+    "api/runs/[id].ts": {
+      "maxDuration": 30,
+      "memory": 512
     }
   }
 }

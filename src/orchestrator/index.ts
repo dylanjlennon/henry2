@@ -2,13 +2,17 @@
  * Orchestrator — runs a set of fetchers in parallel for a resolved property,
  * streams progress events, and aggregates results.
  *
- * Design:
- *   - Fetchers are pure: they receive (property, outDir, onProgress) and
- *     return a FetcherResult. No shared state between fetchers.
- *   - The orchestrator handles concurrency, per-fetcher timeouts, progress
- *     multiplexing, and overall job state.
- *   - REST fetchers run fully in parallel. Browser fetchers are gated by a
- *     small concurrency limit so we don't exhaust Playwright resources.
+ * Responsibilities:
+ *   - Concurrency (REST in parallel, browser gated).
+ *   - Per-fetcher timeout.
+ *   - Progress multiplexing to the caller.
+ *   - Opening a FetcherCall provenance row per fetcher, and closing it
+ *     with the final status + summary data when the fetcher returns.
+ *   - Updating the Run's running totals as calls finish.
+ *
+ * Fetchers themselves stay pure: they get `(property, outDir, onProgress,
+ * signal, run)` and return a FetcherResult. The orchestrator owns the
+ * provenance lifecycle so fetchers don't have to.
  */
 
 import { mkdir } from 'node:fs/promises';
@@ -18,8 +22,11 @@ import type {
   Fetcher,
   FetcherResult,
   ProgressEvent,
+  RunContext,
 } from '../types.ts';
 import { log } from '../lib/log.ts';
+import type { ProvenanceRecorder } from '../provenance/recorder.ts';
+import type { FetcherCall } from '../provenance/schema.ts';
 
 export interface RunOptions {
   /** Output directory — fetchers write their files into sub-paths of this */
@@ -36,6 +43,8 @@ export interface RunOptions {
   onProgress?: (event: ProgressEvent) => void;
   /** Abort signal to cancel all fetchers */
   signal?: AbortSignal;
+  /** Provenance recorder — created by the caller (Slack handler / API / CLI). */
+  recorder: ProvenanceRecorder;
 }
 
 export interface RunSummary {
@@ -61,12 +70,14 @@ export async function runFetchers(
   opts: RunOptions,
 ): Promise<RunSummary> {
   const startedAt = new Date();
-  const runId = makeRunId(property, startedAt);
+  const runId = opts.recorder.runId;
   const outDir = join(opts.outRoot, runId);
   await mkdir(outDir, { recursive: true });
 
   const active = filterFetchers(fetchers, property, opts);
-  log.info('run_started', { runId, pin: property.pin, fetchers: active.map((f) => f.id) });
+  const runLog = log.child({ runId, pin: property.pin });
+  runLog.info('run_started', { fetchers: active.map((f) => f.id) });
+  await opts.recorder.setFetchersPlanned(active.length);
 
   opts.onProgress?.({
     fetcher: 'orchestrator',
@@ -112,7 +123,7 @@ export async function runFetchers(
     status: 'completed',
     message: `Done: ${totals.completed}/${totals.total} succeeded, ${totals.filesProduced} files`,
   });
-  log.info('run_finished', { runId, totals, durationMs: summary.durationMs });
+  runLog.info('run_finished', { totals, durationMs: summary.durationMs });
   return summary;
 }
 
@@ -124,26 +135,70 @@ async function runOneFetcher(
   timeoutMs: number,
 ): Promise<FetcherResult> {
   const t0 = Date.now();
+  // Open the provenance call BEFORE running, so HTTP hits can reference it.
+  const call = await opts.recorder.startFetcherCall(f.id, fetcherVersion(f));
+  const run: RunContext = {
+    runId: opts.recorder.runId,
+    fetcherCallId: call.id,
+    recorder: opts.recorder,
+  };
   try {
-    // Per-fetcher timeout wrapping
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(new Error('fetcher timeout')), timeoutMs);
     if (opts.signal) opts.signal.addEventListener('abort', () => ac.abort(opts.signal!.reason));
     try {
-      return await f.run({
+      const result = await f.run({
         property,
         outDir,
         onProgress: opts.onProgress,
         signal: ac.signal,
+        run,
       });
+      await closeCall(opts.recorder, call, {
+        status: toCallStatus(result.status),
+        error: result.error ?? null,
+        data: result.data ?? null,
+      });
+      return result;
     } finally {
       clearTimeout(timer);
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     opts.onProgress?.({ fetcher: f.id, status: 'failed', error: msg });
+    await closeCall(opts.recorder, call, { status: 'failed', error: msg, data: null });
     return { fetcher: f.id, status: 'failed', files: [], error: msg, durationMs: Date.now() - t0 };
   }
+}
+
+async function closeCall(
+  recorder: ProvenanceRecorder,
+  call: FetcherCall,
+  finish: {
+    status: 'completed' | 'failed' | 'skipped' | 'timeout';
+    error: string | null;
+    data: Record<string, unknown> | null;
+  },
+): Promise<void> {
+  const finishedAt = new Date();
+  const durationMs = finishedAt.getTime() - Date.parse(call.startedAt);
+  await recorder.finishFetcherCall({
+    ...call,
+    status: finish.status,
+    error: finish.error,
+    data: finish.data,
+    finishedAt: finishedAt.toISOString(),
+    durationMs,
+  });
+}
+
+function toCallStatus(s: FetcherResult['status']): 'completed' | 'failed' | 'skipped' {
+  return s;
+}
+
+function fetcherVersion(f: Fetcher): string {
+  // Fetchers may declare a `version` in the future; fall back to Henry version.
+  return (f as unknown as { version?: string }).version ?? '0.1.0';
 }
 
 function filterFetchers(
@@ -164,7 +219,6 @@ async function runWithLimit<T, U>(
   worker: (item: T) => Promise<U>,
   limit: number,
 ): Promise<Promise<U>[]> {
-  // Returns an array of in-flight promises; caller awaits Promise.all.
   const inFlight: Promise<U>[] = [];
   const active: Promise<unknown>[] = [];
   for (const item of items) {
@@ -173,7 +227,6 @@ async function runWithLimit<T, U>(
     active.push(p);
     if (active.length >= limit) {
       await Promise.race(active);
-      // Remove settled promises
       for (let i = active.length - 1; i >= 0; i--) {
         const s = await Promise.race([active[i], Promise.resolve('__pending__')]);
         if (s !== '__pending__') active.splice(i, 1);
@@ -181,9 +234,4 @@ async function runWithLimit<T, U>(
     }
   }
   return inFlight;
-}
-
-function makeRunId(property: CanonicalProperty, now: Date): string {
-  const ts = now.toISOString().replace(/[:.]/g, '-');
-  return `${property.gisPin}-${ts}`;
 }

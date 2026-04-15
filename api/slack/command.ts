@@ -61,6 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   const params = new URLSearchParams(rawBody);
+  const teamId = params.get('team_id') ?? undefined;
   const channelId = params.get('channel_id') ?? '';
   const channelName = params.get('channel_name') ?? undefined;
   const userId = params.get('user_id') ?? '';
@@ -71,7 +72,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
   const slack = new WebClient(botToken);
   // Fire-and-forget; log failures.
-  handleHenryInvocation({ text, channelId, channelName, userId, slack }).catch((err) => {
+  handleHenryInvocation({
+    trigger: 'slack-slash',
+    teamId,
+    text,
+    channelId,
+    channelName,
+    userId,
+    slack,
+  }).catch((err) => {
     log.error('henry_invocation_failed', { err: String(err) });
     slack.chat
       .postMessage({ channel: channelId, text: `:boom: Henry crashed: ${String(err)}` })
