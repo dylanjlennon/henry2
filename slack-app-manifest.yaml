@@ -1,0 +1,53 @@
+# Slack app manifest for Henry.
+#
+# Apply this at https://api.slack.com/apps → Create New App → "From a manifest"
+# After editing URLs below to point at your Vercel deployment.
+#
+# Workspace-wide scopes: the bot can be invoked from ANY channel via the
+# slash command, and via @henry mentions in any channel the bot is invited to.
+
+display_information:
+  name: Henry
+  description: Property research for Buncombe County — paste a PIN or address, get all the docs.
+  background_color: "#0a2540"
+  long_description: >
+    Henry looks up a property in Buncombe County, NC and pulls every
+    available document: parcel record, tax bill, deed, plat, flood maps,
+    septic data, permits. Use /henry <address-or-PIN> from any channel,
+    or invite @henry into a deal channel and it'll auto-detect the property
+    from the channel name.
+
+features:
+  bot_user:
+    display_name: henry
+    always_online: true
+  slash_commands:
+    - command: /henry
+      description: Look up a property in Buncombe County, NC
+      usage_hint: "<address or PIN>  (leave blank to use channel name)"
+      # REPLACE with your Vercel deployment URL:
+      url: https://YOUR-VERCEL-DEPLOYMENT.vercel.app/api/slack/command
+      should_escape: false
+
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read      # hear "@henry" mentions
+      - chat:write             # post messages
+      - chat:write.public      # post in channels we haven't been invited to
+      - channels:read          # read public channel names (for auto-detect)
+      - groups:read            # read private channel names (for auto-detect)
+      - commands               # slash commands
+      - files:write            # upload PDFs/JSON artifacts
+
+settings:
+  event_subscriptions:
+    # REPLACE with your Vercel deployment URL:
+    request_url: https://YOUR-VERCEL-DEPLOYMENT.vercel.app/api/slack/events
+    bot_events:
+      - app_mention
+  interactivity:
+    is_enabled: false
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

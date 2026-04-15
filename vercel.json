@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/slack/command.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    },
+    "api/slack/events.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    }
+  }
+}

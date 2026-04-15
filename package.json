@@ -1,0 +1,37 @@
+{
+  "name": "henry-slack",
+  "version": "0.1.0",
+  "description": "Property research bot for Slack — Buncombe County, NC. Resolve PIN/address, fetch all docs, post to thread.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "vercel dev",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "lint": "tsc --noEmit",
+    "resolve": "tsx scripts/resolve.ts",
+    "fetch": "tsx scripts/fetch.ts"
+  },
+  "dependencies": {
+    "@slack/bolt": "^4.7.0",
+    "@slack/web-api": "^7.10.0",
+    "@vercel/node": "^5.7.5",
+    "playwright-core": "^1.49.0",
+    "@sparticuz/chromium": "^147.0.0",
+    "proj4": "^2.12.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/proj4": "^2.5.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "vercel": "^39.0.0"
+  }
+}
