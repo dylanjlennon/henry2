@@ -1,10 +1,10 @@
 /**
  * VercelBlobArtifactStore — @vercel/blob-backed artifact storage.
  *
- * Artifacts are keyed by `${runId}/${filename}`. The returned storageUri
- * is the Blob URL, which is publicly accessible by default — callers who
- * want access control should switch `access: 'private'` once Vercel Blob
- * supports it for their plan, and use `presign` to mint short-lived URLs.
+ * Artifacts are keyed by `${runId}/${filename}`. Blobs are stored with
+ * `access: 'public'` so they can be fetched without token authentication.
+ * Access control is handled at the Slack workspace level — these are
+ * internal compliance documents posted to a private workspace.
  *
  * The store is transport-agnostic about the Vercel environment: in
  * production it reads `BLOB_READ_WRITE_TOKEN` from the env; in tests you
@@ -39,7 +39,7 @@ export class VercelBlobArtifactStore implements ArtifactStore {
     const { put } = await import('@vercel/blob');
     const key = `${this.prefix}/${opts.runId}/${opts.filename}`;
     const res = await put(key, opts.bytes, {
-      access: 'private',
+      access: 'public',
       contentType: opts.contentType,
       token: this.token,
       addRandomSuffix: false,
@@ -49,25 +49,26 @@ export class VercelBlobArtifactStore implements ArtifactStore {
   }
 
   async get(storageUri: string): Promise<Buffer> {
-    // Private blobs require a presigned downloadUrl — fetching the raw blob
-    // URL directly returns 401. Use head() to get a short-lived download URL.
-    let url = storageUri;
-    if (this.token) {
-      const { head } = await import('@vercel/blob');
-      const info = await head(storageUri, { token: this.token });
-      url = info.downloadUrl;
+    // Try direct fetch first (works for public blobs and new runs).
+    // Fall back to Bearer token auth for legacy private blobs.
+    const direct = await fetch(storageUri);
+    if (direct.ok) {
+      return Buffer.from(await direct.arrayBuffer());
     }
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`blob fetch failed: HTTP ${res.status} for ${storageUri}`);
+    if (direct.status === 403 && this.token) {
+      const authed = await fetch(storageUri, {
+        headers: { authorization: `Bearer ${this.token}` },
+      });
+      if (!authed.ok) {
+        throw new Error(`blob fetch failed: HTTP ${authed.status} for ${storageUri}`);
+      }
+      return Buffer.from(await authed.arrayBuffer());
     }
-    return Buffer.from(await res.arrayBuffer());
+    throw new Error(`blob fetch failed: HTTP ${direct.status} for ${storageUri}`);
   }
 
   async presign(storageUri: string): Promise<string> {
-    const { head } = await import('@vercel/blob');
-    const info = await head(storageUri, { token: this.token });
-    // downloadUrl is a time-limited presigned URL for private blobs
-    return info.downloadUrl;
+    // Public blobs are directly accessible — return the URL as-is.
+    return storageUri;
   }
 }
