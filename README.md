@@ -20,6 +20,40 @@ The compliance requirement gets satisfied automatically. And because the documen
 
 ---
 
+## The Compliance Workflow
+
+### Before Henry
+
+```mermaid
+flowchart TD
+    A[Deal goes under contract] --> B[Agent / TC opens 8–14 browser tabs]
+    B --> C1[Buncombe Tax Portal]
+    B --> C2[Register of Deeds]
+    B --> C3[FEMA Flood Map Service]
+    B --> C4[Buncombe GIS]
+    B --> C5[Accela Permits]
+    B --> C6[SimpliCity]
+    C1 & C2 & C3 & C4 & C5 & C6 --> D[Download each file manually\n~30–60 min]
+    D --> E[Rename & organize files]
+    E --> F[Upload to KWCommand one by one]
+    F --> G{File compliant?}
+    G -- Yes --> H[Agent gets paid]
+    G -- No, missing doc --> D
+```
+
+### After Henry
+
+```mermaid
+flowchart TD
+    A[Deal goes under contract] --> B["/henry 546 Old Haw Creek Rd"]
+    B --> C[Henry fetches all 12 docs in parallel\n~2.5 min]
+    C --> D[PDFs delivered to Slack thread\none file at a time as they finish]
+    D --> E[Agent downloads from Slack\ndrag-and-drop into KWCommand]
+    E --> F[File compliant → Agent gets paid]
+```
+
+---
+
 ## What Henry Does
 
 ```
@@ -72,58 +106,230 @@ A missed flood-zone flag, an unknown lien, an unpermitted addition — these are
 
 ---
 
+## System Architecture
+
+```mermaid
+flowchart LR
+    subgraph Slack["Slack Workspace"]
+        U[Agent types\n/henry address]
+        T[Slack Thread\nfindings + PDFs]
+    end
+
+    subgraph Vercel["Vercel — Serverless Functions"]
+        CMD["POST /api/slack/command\nHMAC verify → ACK → async"]
+        RES["Resolver\nBuncombe GIS → CanonicalProperty"]
+        F1["Fetcher: parcel-json"]
+        F2["Fetcher: fema-flood"]
+        F3["Fetcher: septic"]
+        F4["Fetcher: property-card"]
+        F5["Fetcher: tax-bill"]
+        F6["Fetcher: deed"]
+        F7["Fetcher: plat"]
+        F8["Fetcher: gis-map"]
+        F9["Fetcher: firmette"]
+        F10["Fetcher: buncombe-permits"]
+        F11["Fetcher: simplicity-details"]
+        F12["Fetcher: simplicity-permits"]
+        ART["GET /api/artifact/:id\nbyte proxy"]
+    end
+
+    subgraph Storage["Persistent Storage"]
+        NEO[(Neon Postgres\nprovenance chain)]
+        BLOB[(Vercel Blob\nPDF artifacts)]
+    end
+
+    subgraph External["External Sources"]
+        GIS["Buncombe GIS\nFeatureServer"]
+        FEMA["FEMA NFHL API"]
+        ROD["Register of Deeds\nbrowser portal"]
+        TAX["Buncombe Tax\nbrowser portal"]
+        ACC["Accela Permits\nbrowser portal"]
+        SIM["SimpliCity\nbrowser portal"]
+    end
+
+    U --> CMD
+    CMD --> RES
+    RES --> GIS
+    RES --> F1 & F2 & F3 & F4 & F5 & F6 & F7 & F8 & F9 & F10 & F11 & F12
+    F1 & F2 & F3 --> External
+    F4 & F5 & F6 & F7 & F8 & F9 & F10 & F11 & F12 --> External
+    F4 --> TAX
+    F5 --> TAX
+    F6 & F7 --> ROD
+    F10 --> ACC
+    F11 & F12 --> SIM
+    F1 & F2 & F3 & F4 & F5 & F6 & F7 & F8 & F9 & F10 & F11 & F12 --> NEO
+    F4 & F5 & F6 & F7 & F8 & F9 & F10 & F11 & F12 --> BLOB
+    F1 & F2 & F3 & F4 & F5 & F6 & F7 & F8 & F9 & F10 & F11 & F12 --> T
+    ART --> BLOB
+```
+
+---
+
+## Request Flow (Sequence)
+
+```mermaid
+sequenceDiagram
+    actor Agent
+    participant Slack
+    participant CMD as /api/slack/command
+    participant Resolver
+    participant Fanout as Fan-out Coordinator
+    participant F as Fetcher Functions ×12
+    participant Neon
+    participant Blob
+
+    Agent->>Slack: /henry 546 Old Haw Creek Rd
+    Slack->>CMD: POST (signed)
+    CMD-->>Slack: HTTP 200 ACK (within 3s)
+    CMD->>Slack: "Looking up 546 Old Haw Creek Rd..."
+
+    CMD->>Resolver: resolve(address)
+    Resolver->>Neon: ArcGIS parcel + address layers
+    Resolver-->>CMD: CanonicalProperty {PIN, deed refs, owner...}
+
+    CMD->>Slack: post property summary to thread
+    CMD->>Fanout: runFetchersFanOut(property, delivery)
+
+    par 12 concurrent invocations
+        Fanout->>F: POST /api/fetchers/parcel-json
+        Fanout->>F: POST /api/fetchers/fema-flood
+        Fanout->>F: POST /api/fetchers/tax-bill
+        Fanout->>F: POST /api/fetchers/deed
+        Note over F: ... 8 more in parallel
+    end
+
+    loop As each fetcher resolves
+        F-->>Fanout: { result, artifacts[] }
+        F->>Neon: write FetcherCall + HttpHits + Artifacts
+        F->>Blob: store PDF bytes
+        Fanout->>Slack: post inline findings (data fetchers)
+        Fanout->>Slack: upload PDF to thread (document fetchers)
+    end
+
+    Fanout->>Neon: finishRun(status, totals)
+    CMD->>Slack: ":checkered_flag: Done — 12/12 fetchers, 141s"
+```
+
+---
+
+## Fan-Out Execution Model
+
+```mermaid
+gantt
+    title Fetcher execution timeline (approximate)
+    dateFormat  s
+    axisFormat %Ss
+
+    section Data (REST)
+    parcel-json         :done, 0, 5s
+    fema-flood          :done, 0, 8s
+    septic              :done, 0, 6s
+
+    section Documents (Browser → PDF)
+    property-card       :done, 0, 45s
+    tax-bill            :done, 0, 40s
+    deed                :done, 0, 55s
+    plat                :done, 0, 50s
+    gis-map             :done, 0, 35s
+    firmette            :done, 0, 65s
+    buncombe-permits    :done, 0, 90s
+    simplicity-details  :done, 0, 80s
+    simplicity-permits  :done, 0, 120s
+```
+
+Each fetcher runs in an independent Vercel Function with a **300-second budget and isolated Chromium instance**. Wall time equals the slowest fetcher — not the sum. Without parallelism this would take 8–15 minutes sequentially.
+
+---
+
 ## Sources (12 Fetchers, Buncombe County)
 
-| Document | Source | Type |
-|---|---|---|
-| Parcel record | Buncombe County ArcGIS | REST |
-| FEMA flood zone + data | FEMA NFHL | REST |
-| Septic / sewer status | Buncombe County GIS | REST |
-| Property Record Card | Spatialest | Browser → PDF |
-| Tax Bill | Buncombe County Tax Portal | Browser → PDF |
-| Deed | Buncombe County Register of Deeds | Browser → PDF |
-| Plat | Buncombe County Register of Deeds | Browser → PDF |
-| GIS Parcel Map | Buncombe County GIS | Browser → PDF |
-| FEMA FIRMette | FEMA Flood Map Service Center | Browser → PDF |
-| Building Permits | Buncombe County Accela | Browser → PDF |
-| Asheville Property Details | SimpliCity | Browser → PDF |
-| Asheville Permit History | SimpliCity | Browser → PDF |
+| Fetcher ID | Document | Source | Method |
+|---|---|---|---|
+| `parcel-json` | Parcel record + owner | Buncombe ArcGIS FeatureServer | REST |
+| `fema-flood` | Flood zone + panel data | FEMA NFHL API | REST |
+| `septic` | Septic / sewer status | Buncombe GIS | REST |
+| `property-card` | Property Record Card | Spatialest | Browser → PDF |
+| `tax-bill` | Tax Bill | Buncombe Tax Portal | Browser → PDF |
+| `deed` | Deed | Buncombe Register of Deeds | Browser → PDF |
+| `plat` | Plat | Buncombe Register of Deeds | Browser → PDF |
+| `gis-map` | GIS Parcel Map | Buncombe GIS | Browser → PDF |
+| `firmette` | FEMA FIRMette flood map | FEMA Flood Map Service Center | Browser → PDF |
+| `buncombe-permits` | Building Permits | Buncombe Accela | Browser → PDF |
+| `simplicity-details` | Asheville Property Details | SimpliCity | Browser → PDF |
+| `simplicity-permits` | Asheville Permit History | SimpliCity | Browser → PDF |
 
 Asheville-specific fetchers skip gracefully for properties outside city limits. Deed and Plat skip if no book/page reference is found in the parcel record.
 
 ---
 
-## Architecture
+## Provenance Chain
 
-Henry is a Vercel-native Slack bot. Every `/henry` command kicks off a fan-out across 12 independent serverless functions — one per fetcher — so all 12 run simultaneously with separate 300-second budgets. Wall time is the slowest fetcher, not the sum.
+Every fact Henry produces is fully traceable. Given any artifact, you can answer: what URL was fetched, at what time, with what response code, by what version of the fetcher, triggered by which Slack user in which channel.
 
+```mermaid
+erDiagram
+    Invocation {
+        uuid id
+        string slack_user_id
+        string channel_id
+        string raw_text
+        timestamp created_at
+    }
+    Run {
+        uuid id
+        uuid invocation_id
+        string pin
+        string address
+        string owner
+        string status
+        int fetchers_completed
+        int fetchers_failed
+        int duration_ms
+        timestamp created_at
+    }
+    FetcherCall {
+        uuid id
+        uuid run_id
+        string fetcher_id
+        string status
+        jsonb result
+        string error
+        int duration_ms
+        timestamp created_at
+    }
+    HttpHit {
+        uuid id
+        uuid fetcher_call_id
+        string method
+        string url
+        int status_code
+        string response_hash
+        int duration_ms
+        timestamp created_at
+    }
+    Artifact {
+        uuid id
+        uuid fetcher_call_id
+        string label
+        string content_type
+        string storage_uri
+        string sha256
+        int bytes
+        timestamp created_at
+    }
+
+    Invocation ||--o{ Run : triggers
+    Run ||--o{ FetcherCall : contains
+    FetcherCall ||--o{ HttpHit : records
+    FetcherCall ||--o{ Artifact : produces
 ```
-/henry <address>
-    │
-    ├─ POST /api/slack/command
-    │     verify HMAC → ACK → waitUntil(handler)
-    │
-    ├─ Resolve address → CanonicalProperty
-    │     Buncombe GIS FeatureServer (parcel + address layers)
-    │     Returns: PIN, deed/plat refs, centroid, owner, confidence
-    │
-    ├─ POST /api/fetchers/* × 12  (all in parallel)
-    │     Each function: 300s limit, 2048 MB, isolated Chrome
-    │     Returns: { result, artifacts[] }
-    │
-    │     As each resolves:
-    │       → update Slack progress board
-    │       → post inline findings (data fetchers)
-    │       → upload PDF to thread (document fetchers)
-    │
-    └─ finishRun → summary line with trace link
-```
 
-Every HTTP call, fetcher result, and artifact is recorded in Neon Postgres with a full audit chain (`Invocation → Run → FetcherCall → HttpHit → Artifact`). Every PDF is stored in Vercel Blob. Every run is queryable at `GET /api/runs/:id`.
+This matters for compliance: you can prove what Henry retrieved, from where, and when. Every run is queryable at `GET /api/runs/:id`.
 
 ---
 
-## Endpoints
+## API Endpoints
 
 | Route | Purpose |
 |---|---|
@@ -133,22 +339,6 @@ Every HTTP call, fetcher result, and artifact is recorded in Neon Postgres with 
 | `GET /api/runs` | List recent runs (auth: HENRY_API_TOKEN) |
 | `GET /api/runs/:id` | Full audit trace for a run |
 | `GET /api/artifact/:id` | Proxy artifact bytes from Blob store |
-
----
-
-## Provenance
-
-Every fact Henry produces is traceable. Given any artifact, you can answer: what URL was fetched, at what time, with what response code, by what version of the fetcher, triggered by which Slack user in which channel.
-
-```
-Invocation   who asked, what they typed, where, when
-  └─ Run      resolved property snapshot, execution totals, status
-      └─ FetcherCall   which fetcher, how long, what data, any error
-          ├─ HttpHit    every outbound URL, status, response hash, duration
-          └─ Artifact   file label, SHA-256, blob URL, source URL
-```
-
-This matters for compliance: you can prove what Henry retrieved, from where, and when.
 
 ---
 
