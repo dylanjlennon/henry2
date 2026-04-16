@@ -1,188 +1,225 @@
-# Henry — Slack property research for Buncombe County, NC
+# Henry
 
-Paste a PIN or an address into any Slack channel, get a complete research
-package back in the thread: parcel record, tax bill, deed, plat, FEMA flood,
-septic status, permits. Every produced fact is traceable back to the exact
-URL it came from via a permanent run-trace link.
+> Pull every public-record document for a Buncombe County property in ~2.5 minutes. Delivered to your Slack thread.
 
-## How to use
+---
+
+## The Problem
+
+Every real estate transaction at a Keller Williams market center requires uploading a specific set of public-record documents to KWCommand before the file is compliant — and an agent cannot get paid until the file is compliant.
+
+Those documents are things like the tax bill, the deed, the flood map, the sewer overlay, the permit history. Every one of them is public information. Every one of them lives on a different county or city website. Getting them all means opening 8–14 browser tabs, navigating each portal's own quirks, downloading each file, naming it, and uploading it to KWCommand. An experienced agent or transaction coordinator can do this in 30–60 minutes. An agent without a TC does it themselves.
+
+That's the compliance problem: the documents are the gate between finishing a deal and getting paid.
+
+But the compliance problem is the smaller half of it. Those same documents — the tax bill, the deed, the flood map — contain information that a good agent should be reviewing on every deal regardless of compliance. A flood-zone classification affects insurability. A permit history reveals unpermitted work. A tax value tells you something about the seller's equity position. An agent who actually reads these documents is a better agent. Most agents don't read them because assembling them takes an hour and by that point you just want to upload them and move on.
+
+Henry removes the assembly cost entirely. You type a PIN or address. Henry navigates every portal, downloads every document, and posts each one directly to your Slack thread — along with a plain-English summary of what's in it. Deed arrives in ~40 seconds. Flood map in ~60 seconds. Full package in about 2.5 minutes.
+
+The compliance requirement gets satisfied automatically. And because the documents show up one at a time with a summary, agents actually read them.
+
+---
+
+## What Henry Does
 
 ```
 /henry 546 Old Haw Creek Rd
-/henry 9648-65-1234-00000
-/henry                           ← in a deal channel like #546-old-haw-creek-rd, leave blank
-@henry 546 Old Haw Creek Rd      ← or mention the bot in any channel it's in
+
+→ Slack thread fills up over ~2.5 minutes:
+
+  :pushpin: 9648-65-1234-00000
+    Owner: JOHN SMITH
+    Address: 546 OLD HAW CREEK RD, ASHEVILLE NC 28806
+    Deed: Book 6541 / Page 364
+    Plat: Book 1234 / Page 56
+
+  :file_folder: Parcel record
+    Land value: $87,000
+    Total assessed: $312,000
+    Acreage: 0.43
+    Year built: 1978
+
+  :ocean: FEMA flood zone — X (minimal flood hazard)
+
+  :toilet: Septic / sewer — On septic (1 record)
+
+  [PDF] Property Record Card
+  [PDF] Tax Bill
+  [PDF] Deed — Book 6541 / Page 364
+  [PDF] Plat — Book 1234 / Page 56
+  [PDF] GIS Parcel Map
+  [PDF] FEMA FIRMette
+  [PDF] Buncombe Building Permits
+  [PDF] Asheville Permits
+
+  :checkered_flag: Done — 12/12 fetchers, 141s
 ```
 
-Henry responds in the thread with:
-1. The resolved property (PIN, address, owner, deed/plat book/page, centroid)
-   plus a link to the full run trace.
-2. Live progress updates as each fetcher completes.
-3. A summary + each produced file uploaded as a Slack attachment.
-4. A final "full trace" link back to `/api/runs/:id`.
+Every PDF is a separate file upload. Each one is ready to download and drag into KWCommand.
+
+---
+
+## The Three Layers of Value
+
+**1. Compliance — the payment gate**
+KWCommand requires specific documents per file. Henry generates all of them. Agent or TC uploads them. File closes. Agent gets paid. This is the minimum value proposition and it alone justifies the tool.
+
+**2. Due diligence**
+The documents contain information that should inform every deal. Henry surfaces the key findings inline — flood zone, assessed value, septic vs. sewer, permit history — so agents see them without having to read a PDF. An agent who knows their property's flood zone before showing it to a buyer is doing their job better.
+
+**3. Agent protection**
+A missed flood-zone flag, an unknown lien, an unpermitted addition — these are the conversations agents do not want to have after an offer goes in. Henry makes it easy to know these things before they matter, not after.
+
+---
+
+## Sources (12 Fetchers, Buncombe County)
+
+| Document | Source | Type |
+|---|---|---|
+| Parcel record | Buncombe County ArcGIS | REST |
+| FEMA flood zone + data | FEMA NFHL | REST |
+| Septic / sewer status | Buncombe County GIS | REST |
+| Property Record Card | Spatialest | Browser → PDF |
+| Tax Bill | Buncombe County Tax Portal | Browser → PDF |
+| Deed | Buncombe County Register of Deeds | Browser → PDF |
+| Plat | Buncombe County Register of Deeds | Browser → PDF |
+| GIS Parcel Map | Buncombe County GIS | Browser → PDF |
+| FEMA FIRMette | FEMA Flood Map Service Center | Browser → PDF |
+| Building Permits | Buncombe County Accela | Browser → PDF |
+| Asheville Property Details | SimpliCity | Browser → PDF |
+| Asheville Permit History | SimpliCity | Browser → PDF |
+
+Asheville-specific fetchers skip gracefully for properties outside city limits. Deed and Plat skip if no book/page reference is found in the parcel record.
+
+---
 
 ## Architecture
 
-```
- Slack  ─┬──►  /api/slack/command   (slash command)
-         └──►  /api/slack/events    (@mention)
-                       │
-                       ▼
-                 slack/handler  ──►  resolver  ──►  Buncombe GIS REST
-                       │
-                       ▼
-                 orchestrator  ──►  fetchers (parallel)
-                       │                  │
-                       │                  ├──►  REST fetchers (parcel, FEMA, septic)
-                       │                  └──►  Browser fetchers (tax bill, deed, plat, …)
-                       │
-                       ▼
-                 ProvenanceRecorder ──► Postgres (invocations, runs,
-                                        │        fetcher_calls, http_hits,
-                                        │        artifacts)
-                                        └──►   Vercel Blob (artifact bytes)
-                       │
-                       ▼
-              Slack thread: files uploaded, trace URL posted
-```
-
-### Key modules
-
-- `src/resolver/` — PIN/address → `CanonicalProperty`. Uses Buncombe GIS
-  parcel + address-points layers; spatial fallback when the address layer
-  doesn't carry a PIN.
-- `src/sources/buncombe.ts` — canonical URL catalog. Every external URL we
-  hit lives here; integration tests probe each against the live service.
-- `src/fetchers/` — one module per data source. Each exposes a `Fetcher`
-  with `run(ctx)` that returns a `FetcherResult` and registers artifacts
-  via `ctx.run.recorder.putArtifact(...)`.
-- `src/orchestrator/` — runs fetchers in parallel, opens a `FetcherCall`
-  row per fetcher, streams progress, aggregates results.
-- `src/provenance/` — the audit layer: schemas, storage abstractions,
-  `ProvenanceRecorder`, Postgres + Blob backends, memory-backed test
-  doubles.
-- `src/slack/` — Slack transport. Signature verification, channel-name
-  inference, the handler that ties resolution → orchestration → Slack
-  posting.
-- `api/slack/*.ts` — Vercel serverless entry points.
-- `api/runs/*.ts` — Read API over the provenance store.
-
-## Provenance model
-
-Every externally-sourced fact is linked through a five-level chain:
+Henry is a Vercel-native Slack bot. Every `/henry` command kicks off a fan-out across 12 independent serverless functions — one per fetcher — so all 12 run simultaneously with separate 300-second budgets. Wall time is the slowest fetcher, not the sum.
 
 ```
-  Invocation  (someone asked Henry for a property)
-     ↓
-  Run         (one execution of the orchestrator)
-     ↓
-  FetcherCall (one fetcher module's work within a run)
-     ↓
-  HttpHit     (a single HTTP request to an external source)
-     ↓
-  Artifact    (a file / JSON blob produced, with its SHA-256 digest)
+/henry <address>
+    │
+    ├─ POST /api/slack/command
+    │     verify HMAC → ACK → waitUntil(handler)
+    │
+    ├─ Resolve address → CanonicalProperty
+    │     Buncombe GIS FeatureServer (parcel + address layers)
+    │     Returns: PIN, deed/plat refs, centroid, owner, confidence
+    │
+    ├─ POST /api/fetchers/* × 12  (all in parallel)
+    │     Each function: 300s limit, 2048 MB, isolated Chrome
+    │     Returns: { result, artifacts[] }
+    │
+    │     As each resolves:
+    │       → update Slack progress board
+    │       → post inline findings (data fetchers)
+    │       → upload PDF to thread (document fetchers)
+    │
+    └─ finishRun → summary line with trace link
 ```
 
-Given any artifact or data point you can answer:
-- Who asked for this? Which Slack user, channel, thread?
-- When exactly did the fetch happen?
-- What was the response code? How big was the body?
-- What's the content hash, so we can detect silent upstream changes?
-- What version of Henry and what version of this fetcher ran?
+Every HTTP call, fetcher result, and artifact is recorded in Neon Postgres with a full audit chain (`Invocation → Run → FetcherCall → HttpHit → Artifact`). Every PDF is stored in Vercel Blob. Every run is queryable at `GET /api/runs/:id`.
 
-Query it with SQL or via `GET /api/runs/:id`, which returns the full
-`RunTrace`:
+---
 
-```json
-{
-  "invocation": { "trigger": "slack-slash", "slackUserId": "U…", "rawInput": "…" },
-  "run":        { "id": "…", "status": "completed", "totals": { … } },
-  "fetcherCalls": [ { "fetcherId": "fema-flood", "durationMs": 412, … } ],
-  "httpHits":   [ { "url": "https://…", "status": 200, "responseSha256": "…", "durationMs": 87, … } ],
-  "artifacts":  [ { "label": "Parcel record (JSON)", "sha256": "…", "storageUri": "https://…blob.vercel-storage.com/…" } ]
-}
+## Endpoints
+
+| Route | Purpose |
+|---|---|
+| `POST /api/slack/command` | `/henry` slash command handler |
+| `POST /api/slack/events` | `@henry` mention handler |
+| `POST /api/fetchers/:id` | Fan-out executor — one per fetcher, internal |
+| `GET /api/runs` | List recent runs (auth: HENRY_API_TOKEN) |
+| `GET /api/runs/:id` | Full audit trace for a run |
+| `GET /api/artifact/:id` | Proxy artifact bytes from Blob store |
+
+---
+
+## Provenance
+
+Every fact Henry produces is traceable. Given any artifact, you can answer: what URL was fetched, at what time, with what response code, by what version of the fetcher, triggered by which Slack user in which channel.
+
+```
+Invocation   who asked, what they typed, where, when
+  └─ Run      resolved property snapshot, execution totals, status
+      └─ FetcherCall   which fetcher, how long, what data, any error
+          ├─ HttpHit    every outbound URL, status, response hash, duration
+          └─ Artifact   file label, SHA-256, blob URL, source URL
 ```
 
-## Development
+This matters for compliance: you can prove what Henry retrieved, from where, and when.
+
+---
+
+## Deployment
+
+Henry runs on Vercel. Required environment variables:
+
+```bash
+# Slack
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_SIGNING_SECRET=...
+
+# Database (Neon Postgres)
+DATABASE_URL=postgres://...
+PROVENANCE_BACKEND=postgres
+
+# Artifact storage (Vercel Blob)
+BLOB_READ_WRITE_TOKEN=...
+ARTIFACT_BACKEND=vercel-blob
+
+# Routing (enables fan-out + trace links)
+PUBLIC_BASE_URL=https://henry-slack.vercel.app
+
+# Optional auth
+HENRY_API_TOKEN=...        # Bearer token for /api/runs/*
+HENRY_INTERNAL_TOKEN=...   # Header auth on /api/fetchers/*
+```
+
+Database schema: `src/provenance/migrations/001_init.sql`
+
+---
+
+## Development History
+
+Henry started as a local CLI tool (`apps/fops/henry`) — TypeScript, Playwright, better-sqlite3, sequential execution, output to a local folder. That version proved the fetchers worked against real Buncombe portals and established the document set needed for KWCommand compliance.
+
+Henry 2 (`henry-slack`, this repo) is the production rewrite:
+
+| | henry (v1) | henry-slack (v2) |
+|---|---|---|
+| Interface | CLI prompt | Slack slash command |
+| Execution | Sequential, one browser at a time | 12 parallel Vercel Functions |
+| Storage | SQLite + local files | Neon Postgres + Vercel Blob |
+| Delivery | `results/` folder on disk | Slack thread, one file at a time |
+| Audit trail | Local SQLite rows | Full provenance chain in Neon |
+| Runtime | Local machine | Vercel (serverless, always-on) |
+| Wall time | ~3 minutes | ~2.5 minutes |
+| Tests | 239 (unit + integration) | 58 (unit + live integration) |
+
+The fetcher logic — the actual browser automation for each portal — carried over directly. The architecture around it was rebuilt from scratch for cloud-native parallel execution and always-on availability.
+
+---
+
+## Local Development
 
 ```bash
 npm install
-npm test                              # all tests
-npm run test:unit                     # fast unit tests (offline)
-npm run test:integration              # hits live Buncombe + FEMA APIs
-npm run lint                          # type-check only
+npx playwright install chromium
 
-# CLI — resolves and runs all fetchers; provenance goes to in-memory store
+# Resolve an address (no Slack needed)
 tsx scripts/resolve.ts "546 Old Haw Creek Rd"
-tsx scripts/fetch.ts   "546 Old Haw Creek Rd"
+
+# Run all fetchers locally (no Slack needed)
+tsx scripts/fetch.ts "546 Old Haw Creek Rd"
+# → writes to ./tmp/runs/<runId>/
+
+# Type check
+npx tsc --noEmit
+
+# Tests
+npm test
 ```
 
-Default provenance backends for local dev: `MemoryProvenanceStore` +
-`FilesystemArtifactStore` (artifacts land in `$TMPDIR/henry-artifacts`).
-Set `PROVENANCE_BACKEND=postgres` + `DATABASE_URL` to use a real database
-locally.
-
-## Deploy
-
-1. **Create the Slack app.** Go to <https://api.slack.com/apps> → Create New
-   App → From a manifest. Paste `slack-app-manifest.yaml` (edit the two URLs
-   to your Vercel deployment first). Install to workspace.
-2. **Provision storage.**
-   - **Postgres** (Vercel Postgres, Neon, or Supabase). Run
-     `src/provenance/migrations/001_init.sql` to create the schema.
-   - **Vercel Blob** store (Vercel dashboard → Storage → Create Blob Store).
-3. **Deploy to Vercel.**
-   ```bash
-   vercel --prod
-   ```
-4. **Set environment variables in Vercel:**
-   - `SLACK_BOT_TOKEN` — bot user OAuth token (starts with `xoxb-`)
-   - `SLACK_SIGNING_SECRET` — from the Slack app's Basic Information page
-   - `DATABASE_URL` — Postgres connection string (with `sslmode=require`)
-   - `BLOB_READ_WRITE_TOKEN` — from Vercel Blob
-   - `PROVENANCE_BACKEND=postgres`
-   - `ARTIFACT_BACKEND=vercel-blob`
-   - `PUBLIC_BASE_URL=https://<your-app>.vercel.app` (enables clickable
-     trace links in Slack messages)
-   - `HENRY_API_TOKEN` (optional) — Bearer token required for `/api/runs/*`
-5. **Verify event subscription URL** in the Slack app (it should say
-   "Verified" automatically after deploy).
-
-## Testing strategy
-
-Every external URL has a live probe in `tests/integration/sources.live.test.ts`.
-If Buncombe County changes a URL or field name, the test fails loudly — you
-know exactly what broke.
-
-| Test file | What it covers |
-|-----------|----------------|
-| `tests/unit/normalizeAddress.test.ts` | Address parsing edge cases, USPS abbreviations, punctuation |
-| `tests/unit/pin.test.ts`              | PIN format conversion (dashed ↔ 15-digit) |
-| `tests/unit/channelName.test.ts`      | Channel-name → property inference |
-| `tests/unit/signature.test.ts`        | Slack HMAC signature verification |
-| `tests/unit/provenance.test.ts`       | Recorder lifecycle, request-hash determinism, HTTP instrumentation |
-| `tests/integration/sources.live.test.ts` | Every canonical URL validated against live API |
-| `tests/integration/fetchers.live.test.ts` | Each fetcher produces real output AND populates provenance rows |
-
-## Adding a new county
-
-1. Write an adapter under `src/resolver/adapters/<county>.ts` that exports
-   `lookupParcelByPin` and `searchAddress`.
-2. Add the county id to the `CountyId` union in `src/types.ts`.
-3. Add any county-specific URLs to a new `src/sources/<county>.ts`.
-4. Wire the county into `src/resolver/index.ts`.
-
-Fetchers that aren't county-specific (e.g. FEMA, USPS) work as-is.
-
-## Status
-
-- [x] Resolver (PIN + fuzzy address)
-- [x] Canonical URL catalog + live validation
-- [x] REST fetchers (parcel, FEMA flood, septic)
-- [x] Orchestrator + progress streaming
-- [x] Slack handler + signature verification
-- [x] Vercel API routes
-- [x] Provenance: schemas + recorder + Postgres + Blob + /api/runs
-- [x] GitHub Actions CI
-- [ ] Browser fetchers (tax bill PDF, PRC PDF, deed, plat, GIS map, FIRMette)
-- [ ] Vercel deployment wired to Slack
+Local scripts use in-memory provenance and filesystem artifact storage — no Neon or Blob credentials required.
