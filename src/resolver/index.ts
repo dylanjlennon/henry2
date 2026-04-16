@@ -9,11 +9,11 @@
  *      to get geometry + deed/plat refs.
  */
 
-import type { CanonicalProperty, ResolverInput } from '../types.ts';
-import { looksLikePin, normalizePin } from './pin.ts';
-import { normalizeAddress } from './normalizeAddress.ts';
-import { lookupParcelByPin, lookupParcelByPoint, searchAddress, type ParcelHit, type AddressHit } from './adapters/buncombe.ts';
-import { log } from '../lib/log.ts';
+import type { CanonicalProperty, ResolverInput } from '../types.js';
+import { looksLikePin, normalizePin } from './pin.js';
+import { normalizeAddress } from './normalizeAddress.js';
+import { lookupParcelByPin, lookupParcelByPoint, searchAddress, type ParcelHit, type AddressHit } from './adapters/buncombe.js';
+import { log } from '../lib/log.js';
 
 export class ResolveError extends Error {
   constructor(message: string, readonly cause?: unknown) {
@@ -78,7 +78,11 @@ async function resolveAddress(raw: string): Promise<CanonicalProperty> {
   const { displayPin } = normalizePin(pin);
   const confidence = computeConfidence(hits.length, best, normalized);
   const source = confidence >= 0.95 ? 'address-exact' : 'address-fuzzy';
-  return parcelToCanonical(parcel, pin, displayPin, confidence, source);
+  // Fallback address: if the parcel record has no PropAddr/PropertyAddress, use
+  // the FullCivicAddress from the address-point layer hit.
+  const fallbackAddress =
+    String(best.attributes.FullCivicAddress ?? best.attributes.ADDRESS ?? '').trim() || undefined;
+  return parcelToCanonical(parcel, pin, displayPin, confidence, source, fallbackAddress);
 }
 
 function pickBestHit(hits: AddressHit[], desiredHouseNumber?: string): AddressHit {
@@ -106,13 +110,15 @@ function parcelToCanonical(
   displayPin: string,
   confidence: number,
   source: CanonicalProperty['source'],
+  fallbackAddress?: string,
 ): CanonicalProperty {
   const a = hit.attributes;
+  const parcelAddress = (a.PropAddr ?? a.PropertyAddress) as string | undefined;
   return {
     county: 'buncombe',
     pin: displayPin,
     gisPin,
-    address: (a.PropAddr ?? a.PropertyAddress) as string | undefined,
+    address: parcelAddress || fallbackAddress,
     ownerName: (a.OwnerName ?? a.OwnerName1) as string | undefined,
     centroid: hit.centroid,
     geometry: hit.geometry,

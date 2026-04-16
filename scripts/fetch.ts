@@ -8,14 +8,14 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { resolveProperty } from '../src/resolver/index.ts';
-import { runFetchers } from '../src/orchestrator/index.ts';
-import { ALL_FETCHERS } from '../src/orchestrator/fetchers.ts';
+import { resolveProperty } from '../src/resolver/index.js';
+import { runFetchers } from '../src/orchestrator/index.js';
+import { ALL_FETCHERS } from '../src/orchestrator/fetchers.js';
 import { join } from 'node:path';
 import { cwd } from 'node:process';
-import { makeProvenanceStack } from '../src/provenance/factory.ts';
-import { ProvenanceRecorder } from '../src/provenance/recorder.ts';
-import { canonicalToSnapshot } from '../src/provenance/snapshot.ts';
+import { makeProvenanceStack } from '../src/provenance/factory.js';
+import { ProvenanceRecorder } from '../src/provenance/recorder.js';
+import { canonicalToSnapshot } from '../src/provenance/snapshot.js';
 
 const raw = process.argv.slice(2).join(' ').trim();
 if (!raw) {

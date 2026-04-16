@@ -11,8 +11,8 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { makeProvenanceStack } from '../../src/provenance/factory.ts';
-import { log } from '../../src/lib/log.ts';
+import { makeProvenanceStack } from '../../src/provenance/factory.js';
+import { log } from '../../src/lib/log.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'GET') {

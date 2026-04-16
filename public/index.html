@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Henry</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:-apple-system,system-ui,sans-serif;max-width:640px;margin:4rem auto;padding:0 1rem;color:#222;line-height:1.5}
+    code{background:#f4f4f4;padding:2px 6px;border-radius:3px}
+    h1{font-weight:600}
+    a{color:#0366d6}
+  </style>
+</head>
+<body>
+  <h1>Henry</h1>
+  <p>Slack-native property research for Buncombe County, NC.</p>
+  <p>This host serves Slack webhooks and a run-trace API — there is no public UI.</p>
+  <ul>
+    <li><code>POST /api/slack/command</code> — slash command handler</li>
+    <li><code>POST /api/slack/events</code> — Slack events (app mentions)</li>
+    <li><code>GET  /api/runs</code> — recent run list (auth required)</li>
+    <li><code>GET  /api/runs/:id</code> — single run trace (auth required)</li>
+    <li><code>POST /api/fetchers/:id</code> — isolated fan-out executor (internal)</li>
+    <li><code>GET  /api/artifact/:id</code> — artifact byte proxy (auth required)</li>
+  </ul>
+</body>
+</html>

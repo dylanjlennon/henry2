@@ -11,9 +11,9 @@
 
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Fetcher, FetcherContext, FetcherResult } from '../types.ts';
-import { lookupParcelByPin } from '../resolver/adapters/buncombe.ts';
-import { SOURCES } from '../sources/buncombe.ts';
+import type { Fetcher, FetcherContext, FetcherResult } from '../types.js';
+import { lookupParcelByPin } from '../resolver/adapters/buncombe.js';
+import { SOURCES } from '../sources/buncombe.js';
 
 export const parcelJsonFetcher: Fetcher = {
   id: 'parcel-json',

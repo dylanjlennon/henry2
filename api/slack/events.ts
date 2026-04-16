@@ -11,10 +11,12 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { waitUntil } from '@vercel/functions';
 import { WebClient } from '@slack/web-api';
-import { verifySlackSignature } from '../../src/slack/signature.ts';
-import { handleHenryInvocation } from '../../src/slack/handler.ts';
-import { log } from '../../src/lib/log.ts';
+import { verifySlackSignature } from '../../src/slack/signature.js';
+import { handleHenryInvocation } from '../../src/slack/handler.js';
+import { makeProvenanceStack } from '../../src/provenance/factory.js';
+import { log } from '../../src/lib/log.js';
 
 export const config = { api: { bodyParser: false } };
 
@@ -81,33 +83,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  // ACK first; process async
-  res.status(200).send('');
-
-  if (body.type !== 'event_callback' || !body.event) return;
+  if (body.type !== 'event_callback' || !body.event) {
+    res.status(200).send('');
+    return;
+  }
   const ev = body.event;
-  if (ev.type !== 'app_mention') return; // only handling mentions here
-  if (!ev.channel || !ev.user) return;
-
-  const slack = new WebClient(botToken);
-  let channelName: string | undefined;
-  try {
-    const info = await slack.conversations.info({ channel: ev.channel });
-    channelName = (info.channel as { name?: string } | undefined)?.name;
-  } catch (e) {
-    log.warn('channel_info_failed', { err: String(e) });
+  if (ev.type !== 'app_mention' || !ev.channel || !ev.user) {
+    res.status(200).send('');
+    return;
   }
 
-  handleHenryInvocation({
-    trigger: 'slack-mention',
-    teamId: body.team_id,
-    text: ev.text ?? '',
-    channelId: ev.channel,
-    channelName,
-    userId: ev.user,
-    threadTs: ev.thread_ts ?? ev.ts,
-    slack,
-  }).catch((err) => {
-    log.error('henry_invocation_failed', { err: String(err) });
-  });
+  // Pre-establish DB connection while the request is still active.
+  const provenanceStack = await makeProvenanceStack();
+
+  // ACK — Slack requires a response within 3 s.
+  res.status(200).send('');
+
+  // waitUntil() keeps the function alive with full network access after the ACK.
+  const slack = new WebClient(botToken);
+  waitUntil(
+    (async () => {
+      let channelName: string | undefined;
+      try {
+        const info = await slack.conversations.info({ channel: ev.channel! });
+        channelName = (info.channel as { name?: string } | undefined)?.name;
+      } catch (e) {
+        log.warn('channel_info_failed', { err: String(e) });
+      }
+      await handleHenryInvocation({
+        trigger: 'slack-mention',
+        teamId: body.team_id,
+        text: ev.text ?? '',
+        channelId: ev.channel!,
+        channelName,
+        userId: ev.user!,
+        threadTs: ev.thread_ts ?? ev.ts,
+        slack,
+        provenanceStack,
+      });
+    })().catch((err) => {
+      log.error('henry_invocation_failed', { err: String(err) });
+    }),
+  );
 }

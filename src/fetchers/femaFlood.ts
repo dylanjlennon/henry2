@@ -11,9 +11,9 @@
 
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Fetcher, FetcherContext, FetcherResult } from '../types.ts';
-import { httpJson } from '../lib/http.ts';
-import { SOURCES, arcgisQueryUrl } from '../sources/buncombe.ts';
+import type { Fetcher, FetcherContext, FetcherResult } from '../types.js';
+import { httpJson } from '../lib/http.js';
+import { SOURCES, arcgisQueryUrl } from '../sources/buncombe.js';
 
 interface FloodZoneAttrs {
   FLD_ZONE?: string;

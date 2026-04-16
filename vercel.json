@@ -3,17 +3,25 @@
   "functions": {
     "api/slack/command.ts": {
       "maxDuration": 300,
-      "memory": 1024
+      "memory": 2048
     },
     "api/slack/events.ts": {
       "maxDuration": 300,
-      "memory": 1024
+      "memory": 2048
     },
     "api/runs/index.ts": {
       "maxDuration": 30,
       "memory": 512
     },
     "api/runs/[id].ts": {
+      "maxDuration": 30,
+      "memory": 512
+    },
+    "api/fetchers/[id].ts": {
+      "maxDuration": 300,
+      "memory": 2048
+    },
+    "api/artifact/[id].ts": {
       "maxDuration": 30,
       "memory": 512
     }

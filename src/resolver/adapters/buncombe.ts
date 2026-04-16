@@ -9,9 +9,9 @@
  * we ask the server to project to EPSG:4326 (WGS84 lon/lat) via outSR.
  */
 
-import { httpJson } from '../../lib/http.ts';
-import type { ProvenanceRecorder } from '../../provenance/recorder.ts';
-import type { NormalizedAddress } from '../normalizeAddress.ts';
+import { httpJson } from '../../lib/http.js';
+import type { ProvenanceRecorder } from '../../provenance/recorder.js';
+import type { NormalizedAddress } from '../normalizeAddress.js';
 
 /** Optional provenance hooks — when present, every HTTP hit gets recorded. */
 export interface GisQueryOptions {

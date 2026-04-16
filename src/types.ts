@@ -67,7 +67,7 @@ export interface RunContext {
   fetcherCallId: string;
   /** See src/provenance/recorder.ts. Typed as `unknown` here to avoid a
    *  circular import from types.ts → provenance/recorder.ts → types.ts. */
-  recorder: import('./provenance/recorder.ts').ProvenanceRecorder;
+  recorder: import('./provenance/recorder.js').ProvenanceRecorder;
 }
 
 export interface ProgressEvent {

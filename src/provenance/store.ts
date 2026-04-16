@@ -20,7 +20,7 @@ import type {
   Invocation,
   Run,
   RunTrace,
-} from './schema.ts';
+} from './schema.js';
 
 export interface ProvenanceStore {
   saveInvocation(inv: Invocation): Promise<void>;
@@ -31,6 +31,7 @@ export interface ProvenanceStore {
   saveHttpHit(hit: HttpHit): Promise<void>;
   saveArtifact(artifact: Artifact): Promise<void>;
 
+  getArtifact(id: string): Promise<Artifact | null>;
   getRunTrace(runId: string): Promise<RunTrace | null>;
   listRuns(opts?: { limit?: number; offset?: number }): Promise<Run[]>;
 }

@@ -23,10 +23,10 @@ import type {
   FetcherResult,
   ProgressEvent,
   RunContext,
-} from '../types.ts';
-import { log } from '../lib/log.ts';
-import type { ProvenanceRecorder } from '../provenance/recorder.ts';
-import type { FetcherCall } from '../provenance/schema.ts';
+} from '../types.js';
+import { log } from '../lib/log.js';
+import type { ProvenanceRecorder } from '../provenance/recorder.js';
+import type { FetcherCall } from '../provenance/schema.js';
 
 export interface RunOptions {
   /** Output directory — fetchers write their files into sub-paths of this */
@@ -93,10 +93,13 @@ export async function runFetchers(
 
   const runOne = (f: Fetcher) => runOneFetcher(f, property, outDir, opts, fetcherTimeout);
 
-  const results = await Promise.all([
-    ...rest.map(runOne),
-    ...(await runWithLimit(browser, runOne, browserLimit)),
+  // REST fetchers run fully in parallel; browser fetchers are concurrency-gated.
+  // Both buckets start at the same time.
+  const [restResults, browserResults] = await Promise.all([
+    Promise.all(rest.map(runOne)),
+    runWithLimit(browser, runOne, browserLimit),
   ]);
+  const results = [...restResults, ...browserResults];
 
   const finishedAt = new Date();
   const totals = {
@@ -214,24 +217,31 @@ function filterFetchers(
   });
 }
 
+/**
+ * Run `worker` over every item in `items`, keeping at most `limit` concurrent
+ * executions at any time. Returns results in the original order.
+ *
+ * The previous implementation called worker() before checking the limit, so
+ * ALL workers started immediately — this is the fixed version.
+ */
 async function runWithLimit<T, U>(
   items: T[],
   worker: (item: T) => Promise<U>,
   limit: number,
-): Promise<Promise<U>[]> {
-  const inFlight: Promise<U>[] = [];
-  const active: Promise<unknown>[] = [];
-  for (const item of items) {
-    const p = worker(item);
-    inFlight.push(p);
-    active.push(p);
-    if (active.length >= limit) {
-      await Promise.race(active);
-      for (let i = active.length - 1; i >= 0; i--) {
-        const s = await Promise.race([active[i], Promise.resolve('__pending__')]);
-        if (s !== '__pending__') active.splice(i, 1);
-      }
+): Promise<U[]> {
+  if (items.length === 0) return [];
+  const results: U[] = new Array(items.length);
+  let next = 0;
+
+  // Each "slot" loop picks the next unclaimed item and processes it until
+  // the queue is empty. Because `next++` is synchronous, there's no race.
+  async function slot(): Promise<void> {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await worker(items[i]);
     }
   }
-  return inFlight;
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, slot));
+  return results;
 }

@@ -28,9 +28,9 @@ import type {
   Invocation,
   PropertySnapshot,
   Run,
-} from './schema.ts';
-import { HENRY_VERSION } from './schema.ts';
-import type { ArtifactStore, ProvenanceStore } from './store.ts';
+} from './schema.js';
+import { HENRY_VERSION } from './schema.js';
+import type { ArtifactStore, ProvenanceStore } from './store.js';
 
 export interface RecorderOptions {
   store: ProvenanceStore;
@@ -58,6 +58,7 @@ export class ProvenanceRecorder {
   private readonly now: () => Date;
 
   private run: Run | null = null;
+  private readonly artifactLog: Artifact[] = [];
   private totals = {
     fetchersTotal: 0,
     fetchersCompleted: 0,
@@ -171,7 +172,13 @@ export class ProvenanceRecorder {
     };
     await this.store.saveArtifact(artifact);
     this.totals.artifactsProduced++;
+    this.artifactLog.push(artifact);
     return artifact;
+  }
+
+  /** All artifacts written during this recorder's lifetime. */
+  get artifacts(): readonly Artifact[] {
+    return this.artifactLog;
   }
 
   /** A fresh HTTP hit id (UUID). Exposed so callers can link request/response logs. */

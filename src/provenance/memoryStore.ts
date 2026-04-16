@@ -15,8 +15,8 @@ import type {
   Invocation,
   Run,
   RunTrace,
-} from './schema.ts';
-import type { ProvenanceStore, ArtifactStore } from './store.ts';
+} from './schema.js';
+import type { ProvenanceStore, ArtifactStore } from './store.js';
 
 export class MemoryProvenanceStore implements ProvenanceStore {
   private invocations = new Map<string, Invocation>();
@@ -32,6 +32,10 @@ export class MemoryProvenanceStore implements ProvenanceStore {
   async updateFetcherCall(call: FetcherCall): Promise<void> { this.fetcherCalls.set(call.id, call); }
   async saveHttpHit(hit: HttpHit): Promise<void> { this.httpHits.set(hit.id, hit); }
   async saveArtifact(a: Artifact): Promise<void> { this.artifacts.set(a.id, a); }
+
+  async getArtifact(id: string): Promise<Artifact | null> {
+    return this.artifacts.get(id) ?? null;
+  }
 
   async getRunTrace(runId: string): Promise<RunTrace | null> {
     const run = this.runs.get(runId);

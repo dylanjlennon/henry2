@@ -12,7 +12,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { ArtifactStore } from './store.ts';
+import type { ArtifactStore } from './store.js';
 
 export interface VercelBlobArtifactStoreOptions {
   /** Overrides the BLOB_READ_WRITE_TOKEN env var. */
@@ -39,7 +39,7 @@ export class VercelBlobArtifactStore implements ArtifactStore {
     const { put } = await import('@vercel/blob');
     const key = `${this.prefix}/${opts.runId}/${opts.filename}`;
     const res = await put(key, opts.bytes, {
-      access: 'public',
+      access: 'private',
       contentType: opts.contentType,
       token: this.token,
       addRandomSuffix: false,
@@ -49,7 +49,15 @@ export class VercelBlobArtifactStore implements ArtifactStore {
   }
 
   async get(storageUri: string): Promise<Buffer> {
-    const res = await fetch(storageUri);
+    // Private blobs require a presigned downloadUrl — fetching the raw blob
+    // URL directly returns 401. Use head() to get a short-lived download URL.
+    let url = storageUri;
+    if (this.token) {
+      const { head } = await import('@vercel/blob');
+      const info = await head(storageUri, { token: this.token });
+      url = info.downloadUrl;
+    }
+    const res = await fetch(url);
     if (!res.ok) {
       throw new Error(`blob fetch failed: HTTP ${res.status} for ${storageUri}`);
     }
@@ -57,9 +65,9 @@ export class VercelBlobArtifactStore implements ArtifactStore {
   }
 
   async presign(storageUri: string): Promise<string> {
-    // Vercel Blob public URLs are already durable + directly servable.
-    // When access: 'private' becomes available for our plan, this is where
-    // we'd mint a time-limited URL.
-    return storageUri;
+    const { head } = await import('@vercel/blob');
+    const info = await head(storageUri, { token: this.token });
+    // downloadUrl is a time-limited presigned URL for private blobs
+    return info.downloadUrl;
   }
 }

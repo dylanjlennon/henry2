@@ -27,8 +27,8 @@ import {
   Invocation,
   Run,
   RunTrace,
-} from './schema.ts';
-import type { ProvenanceStore } from './store.ts';
+} from './schema.js';
+import type { ProvenanceStore } from './store.js';
 
 export interface PostgresProvenanceStoreOptions {
   pool: Pool;
@@ -170,6 +170,15 @@ export class PostgresProvenanceStore implements ProvenanceStore {
         a.sha256, a.sourceUrl, a.storageUri, a.createdAt,
       ],
     );
+  }
+
+  async getArtifact(id: string): Promise<Artifact | null> {
+    const res = await this.pool.query(
+      `SELECT * FROM artifacts WHERE id = $1 LIMIT 1`,
+      [id],
+    );
+    if (res.rowCount === 0) return null;
+    return artifactFromRow(res.rows[0]);
   }
 
   async getRunTrace(runId: string): Promise<RunTrace | null> {
@@ -331,6 +340,14 @@ export async function getSharedPool(): Promise<Pool> {
     max: Number(process.env.PG_POOL_MAX ?? 3),
     // In production (Neon, Vercel Postgres, Supabase) TLS is required.
     ssl: url.includes('sslmode=disable') ? false : { rejectUnauthorized: false },
+    // Fail fast rather than hanging indefinitely in serverless environments.
+    connectionTimeoutMillis: 10_000,
+    idleTimeoutMillis: 20_000,
   });
+  // Eagerly open one TCP connection so subsequent queries can reuse it.
+  // In Vercel serverless, new outbound TCP connections are restricted after
+  // res.send() completes — this must run while the request is still active.
+  const client = await sharedPool.connect();
+  client.release();
   return sharedPool;
 }

@@ -10,9 +10,9 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { log } from './log.ts';
-import { computeRequestHash, sha256Hex } from '../provenance/recorder.ts';
-import type { ProvenanceRecorder } from '../provenance/recorder.ts';
+import { log } from './log.js';
+import { computeRequestHash, sha256Hex } from '../provenance/recorder.js';
+import type { ProvenanceRecorder } from '../provenance/recorder.js';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_RETRIES = 2;

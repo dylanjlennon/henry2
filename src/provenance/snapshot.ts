@@ -9,8 +9,8 @@
  * without joins.
  */
 
-import type { CanonicalProperty } from '../types.ts';
-import type { PropertySnapshot } from './schema.ts';
+import type { CanonicalProperty } from '../types.js';
+import type { PropertySnapshot } from './schema.js';
 
 export function canonicalToSnapshot(p: CanonicalProperty): PropertySnapshot {
   return {

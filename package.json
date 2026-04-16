@@ -20,8 +20,9 @@
   "dependencies": {
     "@slack/bolt": "^4.7.0",
     "@slack/web-api": "^7.10.0",
-    "@sparticuz/chromium": "^147.0.0",
-    "@vercel/blob": "^0.27.3",
+    "@sparticuz/chromium-min": "^147.0.0",
+    "@vercel/blob": "^2.3.3",
+    "@vercel/functions": "^3.4.3",
     "@vercel/node": "^5.7.5",
     "pg": "^8.20.0",
     "playwright-core": "^1.49.0",

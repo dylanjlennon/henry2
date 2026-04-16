@@ -6,19 +6,20 @@
  *   channel_name, user_id, text, response_url, trigger_id, ...
  *
  * We must respond within 3 seconds. We acknowledge immediately with an
- * empty 200 and do the real work asynchronously. Slack's `response_url`
- * can be used later; we prefer `chat.postMessage` via WebClient so we can
- * keep a real thread.
+ * empty 200 and do the real work via waitUntil() so Vercel keeps the function
+ * alive (with full network access) until the background promise resolves.
  *
  * INSTALLATION NOTE: Works from ANY channel in the workspace because the
  * slash command is workspace-scoped in the Slack app manifest.
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { waitUntil } from '@vercel/functions';
 import { WebClient } from '@slack/web-api';
-import { verifySlackSignature } from '../../src/slack/signature.ts';
-import { handleHenryInvocation } from '../../src/slack/handler.ts';
-import { log } from '../../src/lib/log.ts';
+import { verifySlackSignature } from '../../src/slack/signature.js';
+import { handleHenryInvocation } from '../../src/slack/handler.js';
+import { makeProvenanceStack } from '../../src/provenance/factory.js';
+import { log } from '../../src/lib/log.js';
 
 // Prevent Vercel from parsing the body — we need the raw string to verify the signature.
 export const config = { api: { bodyParser: false } };
@@ -67,23 +68,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   const userId = params.get('user_id') ?? '';
   const text = params.get('text') ?? '';
 
-  // ACK immediately so Slack doesn't time out
+  // Pre-establish the DB connection while the HTTP request is still active.
+  const provenanceStack = await makeProvenanceStack();
+
+  // ACK immediately — Slack requires a response within 3 s.
   res.status(200).send('');
 
+  // waitUntil() keeps the Vercel function alive (with full network access)
+  // until this promise settles, even though we already sent the response.
   const slack = new WebClient(botToken);
-  // Fire-and-forget; log failures.
-  handleHenryInvocation({
-    trigger: 'slack-slash',
-    teamId,
-    text,
-    channelId,
-    channelName,
-    userId,
-    slack,
-  }).catch((err) => {
-    log.error('henry_invocation_failed', { err: String(err) });
-    slack.chat
-      .postMessage({ channel: channelId, text: `:boom: Henry crashed: ${String(err)}` })
-      .catch(() => undefined);
-  });
+  waitUntil(
+    handleHenryInvocation({
+      trigger: 'slack-slash',
+      teamId,
+      text,
+      channelId,
+      channelName,
+      userId,
+      slack,
+      provenanceStack,
+    }).catch(async (err) => {
+      log.error('henry_invocation_failed', { err: String(err) });
+      await slack.chat
+        .postMessage({ channel: channelId, text: `:boom: Henry crashed: ${String(err)}` })
+        .catch(() => undefined);
+    }),
+  );
 }

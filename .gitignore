@@ -1,4 +1,5 @@
 node_modules/
+.claude/
 .vercel/
 .env
 .env.local
@@ -11,3 +12,4 @@ tmp/
 cache/
 vitest.config.ts.timestamp-*.mjs
 apply_migration.mjs
+.env*.local

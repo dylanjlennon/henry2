@@ -6,7 +6,7 @@
  * the whole Slack stack.
  */
 
-import { resolveProperty } from '../src/resolver/index.ts';
+import { resolveProperty } from '../src/resolver/index.js';
 
 const raw = process.argv.slice(2).join(' ').trim();
 if (!raw) {

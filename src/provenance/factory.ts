@@ -13,8 +13,8 @@
 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ArtifactStore, ProvenanceStore } from './store.ts';
-import { FilesystemArtifactStore, MemoryProvenanceStore } from './memoryStore.ts';
+import type { ArtifactStore, ProvenanceStore } from './store.js';
+import { FilesystemArtifactStore, MemoryProvenanceStore } from './memoryStore.js';
 
 export interface ProvenanceStack {
   store: ProvenanceStore;
@@ -42,7 +42,7 @@ async function buildStore(backend: string): Promise<ProvenanceStore> {
     case 'memory':
       return new MemoryProvenanceStore();
     case 'postgres': {
-      const { PostgresProvenanceStore, getSharedPool } = await import('./postgresStore.ts');
+      const { PostgresProvenanceStore, getSharedPool } = await import('./postgresStore.js');
       return new PostgresProvenanceStore({ pool: await getSharedPool() });
     }
     default:
@@ -57,7 +57,7 @@ async function buildArtifactStore(backend: string): Promise<ArtifactStore> {
       return new FilesystemArtifactStore(root);
     }
     case 'vercel-blob': {
-      const { VercelBlobArtifactStore } = await import('./blobStore.ts');
+      const { VercelBlobArtifactStore } = await import('./blobStore.js');
       return new VercelBlobArtifactStore();
     }
     default:
