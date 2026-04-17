@@ -1,8 +1,38 @@
 /**
- * septic — Buncombe County septic system data via spatial query.
+ * septic — Buncombe County septic system data via spatial REST query.
  *
- * If a septic record intersects the parcel centroid, the property is on
- * septic; otherwise it's likely on public sewer (or unknown).
+ * TARGET URL:
+ *   https://services6.arcgis.com/VLA0ImJ33zhtGEaP/arcgis/rest/services/
+ *     Buncombe%20County%20Septic%20Data/FeatureServer/0/query
+ *   (Built by arcgisQueryUrl(SOURCES.septicLayer, ...) in src/sources/buncombe.ts)
+ *
+ * HOW IT WORKS:
+ *   Sends a single spatial query: "give me all septic records within 75 meters
+ *   of this parcel's centroid (lon/lat)."
+ *
+ *   The 75m buffer was chosen to reliably capture septic systems recorded at the
+ *   tank or drainfield location, which are often offset from the parcel centroid
+ *   by 20–50 meters for rural properties. A tighter buffer (e.g. 10m) misses
+ *   edge-located systems; a wider buffer (e.g. 200m) picks up neighbors.
+ *
+ *   Query parameters:
+ *     geometry: { x: lon, y: lat, spatialReference: { wkid: 4326 } }  (WGS84)
+ *     geometryType: esriGeometryPoint
+ *     distance: 75, units: esriSRUnit_Meter
+ *     spatialRel: esriSpatialRelIntersects
+ *     outFields: *  (return all attribute columns)
+ *     returnGeometry: false  (we don't need the polygon, just attributes)
+ *
+ * RESULT INTERPRETATION:
+ *   features.length > 0  → property has a recorded septic system → onSeptic: true
+ *   features.length === 0 → no record within buffer → likely on public sewer (or unrecorded)
+ *   Note: absence of a record doesn't guarantee public sewer — some rural properties
+ *   have unrecorded or grandfathered systems.
+ *
+ * WHAT CAN BREAK:
+ *   - Requires ctx.property.centroid (skips if missing)
+ *   - ArcGIS service URL is hosted by county on ArcGIS Online — could move
+ *   - Buffer distance may need tuning if false negatives increase
  */
 
 import { writeFile, mkdir } from 'node:fs/promises';

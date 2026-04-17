@@ -1,11 +1,40 @@
 /**
  * simplicityProperty — fetches City of Asheville property details from SimpliCity.
  *
- * Searches by GIS PIN at simplicity.ashevillenc.gov/permits/search.
- * If the property is outside Asheville city limits, the search returns no
- * results and this fetcher skips gracefully.
+ * TARGET URL:
+ *   https://simplicity.ashevillenc.gov/permits/search?search={displayPin}
+ *   (Built by ashevillePermitsUrl() in src/sources/buncombe.ts)
  *
- * Produces up to two PDFs: property details page and associated address page.
+ * NOTE: This fetcher uses a PIN deep-link (not address search like ashevillePermits).
+ * The PIN in the query string tells SimpliCity's React app to pre-filter results
+ * to this exact parcel. Properties outside Asheville city limits return no results.
+ *
+ * FLOW:
+ *   1. Navigate to the PIN search URL (networkidle, 60s).
+ *   2. Wait 2s + dismiss cookie/terms modal (button text: "Accept").
+ *   3. Check page HTML for "No results" / "not found" → skip if outside Asheville.
+ *   4. Find the first property result link:
+ *        CSS: a[href*="property"]
+ *      (SimpliCity result items link to /property/{id} — first one is the match)
+ *   5. Click the property link → wait networkidle + 5s for the React detail view to load.
+ *   6. Scroll to bottom (2s) then back to top (1s) to ensure all lazy sections render.
+ *   7. Capture page.pdf() → PDF 1: simplicity-property-{gisPin}.pdf
+ *      This is the full property card: ownership, zoning, land use, valuations.
+ *
+ *   OPTIONAL PDF 2 (associated address):
+ *   8. Look for the "Associated Address" link on the property detail page:
+ *        CSS: a[href*="/address?"], a:has-text("Associated Address")
+ *      Present only for properties with an address record in the city system.
+ *   9. If found: click → wait networkidle + 5s → scroll → capture PDF 2:
+ *        simplicity-address-{gisPin}.pdf
+ *      This is the city address record: address history, service connections, notes.
+ *
+ * WHAT CAN BREAK:
+ *   - "No results" HTML check is fragile if SimpliCity changes that copy
+ *   - a[href*="property"] selector hits any link with "property" in the href;
+ *     if navigation links change, could click the wrong thing
+ *   - 5s post-click wait is a guess for React render time; slow city servers need more
+ *   - Associated address link may not exist for rural-style lots in the city boundary
  */
 
 import { writeFile, mkdir } from 'node:fs/promises';

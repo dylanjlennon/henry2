@@ -1,8 +1,36 @@
 /**
  * propertyCard — fetches the Spatialest Property Record Card (PRC) as a PDF.
  *
- * Navigates directly to the deep-link URL for the PIN, waits for the
- * interactive card to render, then calls page.pdf().
+ * TARGET URL:
+ *   https://prc-buncombe.spatialest.com/#/property/{gisPin}
+ *   (15-digit GIS PIN, no dashes. Hard-coded here — no builder in buncombe.ts
+ *   because there is no parameterized variation; the hash-route is the only form.)
+ *
+ * WHAT IT IS:
+ *   Spatialest is the third-party property valuation platform Buncombe County uses.
+ *   The PRC is the official tax assessor record: square footage, room count, year built,
+ *   construction quality, assessed value history, land details, and sales history.
+ *   This is a React single-page app (SPA) — the URL hash is the client-side route.
+ *
+ * FLOW:
+ *   1. Navigate to the deep-link URL (waitUntil: networkidle, 60s).
+ *      networkidle works here because Spatialest's data fetch is a single API call
+ *      and the SPA idles cleanly after it resolves.
+ *   2. dismissModal() — Spatialest sometimes shows a "Continue as Guest" overlay.
+ *   3. Wait 3s extra render buffer. After networkidle, React still needs a render
+ *      cycle or two to paint the property card sections from the fetched JSON.
+ *      Without this wait, the PDF captures a partially-rendered card (e.g. blank
+ *      valuation tables).
+ *   4. dismissModal() again — a second modal can appear after the data loads
+ *      (e.g. "Data may be subject to change" notice).
+ *   5. page.pdf() → property-card-{gisPin}.pdf
+ *
+ * WHAT CAN BREAK:
+ *   - URL structure (/#/property/{id}) is Spatialest's standard pattern and has been
+ *     stable, but could change if county upgrades to a new Spatialest version
+ *   - 3s wait may be insufficient on slow connections; increase to 5s if blank tables appear
+ *   - dismissModal() looks for common modal close patterns — if Spatialest changes
+ *     their modal markup, it silently skips (non-fatal; card still captures)
  */
 
 import { writeFile, mkdir } from 'node:fs/promises';

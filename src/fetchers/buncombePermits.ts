@@ -1,8 +1,29 @@
 /**
  * buncombePermits — fetches Buncombe County building permits from Accela.
  *
- * Navigates to the Accela portal, enters the GIS PIN in the parcel search
- * field, submits, then generates a PDF of the results page.
+ * TARGET URL:
+ *   https://aca-prod.accela.com/BUNCOMBECONC/Cap/CapHome.aspx?module=Building&...
+ *   (The full URL is built by accelaPermitsUrl() in src/sources/buncombe.ts)
+ *
+ * FLOW:
+ *   1. Navigate to Accela "Building" tab landing page (waitUntil: networkidle, 90s).
+ *      The long timeout is needed — Accela is a legacy .NET app and loads slowly.
+ *   2. Wait 3s for the .NET WebForms page to fully initialize its PostBack handlers.
+ *   3. Find the Parcel Number input:
+ *        CSS: #ctl00_PlaceHolderMain_generalSearchForm_txtGSParcelNo
+ *        (ASP.NET server-generated ID — stable unless county upgrades Accela version)
+ *      Fill with the 15-digit GIS PIN (no dashes).
+ *   4. Wait 1.5s then press Enter. The form does a full PostBack (page reload).
+ *   5. Wait for networkidle again (catches the PostBack reload), then 3s buffer.
+ *   6. Scroll pattern: 1000px down → bottom → top, with waits between each.
+ *      Accela lazy-loads permit cards via JavaScript as the user scrolls.
+ *      Without this, the PDF captures only the first visible batch.
+ *   7. Capture the full results page as PDF (page.pdf via pdfOptions()).
+ *
+ * WHAT CAN BREAK:
+ *   - Accela form ID changes if county upgrades (throw tells you immediately)
+ *   - networkidle can time out on slow county days — the .catch(() => {}) swallows it
+ *   - Scroll amounts are guesses; if a property has >20 permits, last batch may be cut off
  */
 
 import { writeFile, mkdir } from 'node:fs/promises';
@@ -40,7 +61,9 @@ export const buncombePermitsFetcher: Fetcher = {
       await page.waitForLoadState('networkidle').catch(() => {});
       await page.waitForTimeout(3_000);
 
-      // Scroll down to trigger any lazy-loaded result content
+      // Scroll to trigger lazy-loaded permit cards. Accela renders results
+      // in batches as you scroll — skipping this leaves the bottom ~30% blank.
+      // Pattern: partial scroll → full bottom → back to top (for clean PDF capture).
       await page.evaluate(() => window.scrollBy(0, 1_000));
       await page.waitForTimeout(2_000);
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));

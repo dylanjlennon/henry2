@@ -1,10 +1,43 @@
 /**
  * ashevillePermits — fetches Asheville city permit history from SimpliCity.
  *
- * Searches by address (not PIN), navigates to the Permits tab, downloads a
- * CSV if available, and captures the permit list as a PDF.
+ * TARGET URL:
+ *   https://simplicity.ashevillenc.gov/permits/search
+ *   (Address search, NOT PIN — SimpliCity's permits search only accepts address strings)
  *
- * Skips gracefully if no address is available or the property isn't in Asheville.
+ * NOTE: simplicityProperty (sister fetcher) uses a PIN deep-link to get property details.
+ * This fetcher uses address search to reach the Permits tab specifically.
+ *
+ * FLOW:
+ *   1. Navigate to https://simplicity.ashevillenc.gov/permits/search (networkidle, 60s).
+ *   2. Wait 2s + dismiss cookie/terms modal (button text: "Accept").
+ *   3. Fill the search box:
+ *        CSS: #searchBox  (fallback: input[placeholder*="Search"])
+ *      with ctx.property.address (e.g. "546 Old Haw Creek Rd").
+ *   4. Wait 2s for the React autocomplete to populate.
+ *   5. Wait for dropdown option to appear:
+ *        CSS: [role="option"], .dropdown-item, .search-result  (5s timeout)
+ *      Find the option containing the first part of the address (before any comma).
+ *      Click it. If no dropdown appears, fall back to pressing Enter or clicking Search.
+ *   6. Wait for networkidle + 2-3s. Check page HTML for "No results" / "not found"
+ *      strings — if present, property is outside Asheville city limits → skip.
+ *   7. Wait 1s then find the Permits tab:
+ *        CSS: a:has-text("Permits"), button:has-text("Permits")
+ *      If tab not found → skip (some address types don't have a Permits tab).
+ *   8. Click the Permits tab → wait networkidle + 2s.
+ *   9. Download CSV if a Download button exists:
+ *        CSS: button:has-text("Download"), a:has-text("Download")
+ *      waitForEvent('download', 30s). Saved as asheville-permits-{gisPin}.csv.
+ *  10. Expand all accordion rows (collapsed permit details):
+ *        CSS: button[aria-expanded="false"]
+ *      Click each with 300ms between to let them open before PDF capture.
+ *  11. Wait 1s then capture full page as PDF → asheville-permits-{gisPin}.pdf.
+ *
+ * WHAT CAN BREAK:
+ *   - #searchBox selector if SimpliCity redesigns the search form
+ *   - Autocomplete may not fire if the address has unusual formatting
+ *   - "No results" check is string-matching page HTML — fragile if copy changes
+ *   - aria-expanded="false" accordion selector depends on Angular/React component pattern
  */
 
 import { writeFile, mkdir } from 'node:fs/promises';

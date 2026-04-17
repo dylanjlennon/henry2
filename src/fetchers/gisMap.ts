@@ -1,9 +1,56 @@
 /**
  * gisMap — exports the Buncombe County GIS viewer map as a PDF.
  *
- * Navigates to the PINN-parameterized viewer URL, waits for tile layers to
- * stabilize, then uses the built-in Export PDF mechanism. Falls back to
- * page.pdf() if the export widget is unavailable.
+ * TARGET URL:
+ *   https://gis.buncombenc.gov/buncomap/Default.aspx?PINN={displayPin}
+ *   (Built by gisMapViewerUrl() in src/sources/buncombe.ts)
+ *   This is the county's own ESRI-powered interactive map viewer.
+ *   The PINN parameter zooms and highlights the parcel on load.
+ *
+ * FLOW:
+ *   1. Navigate to the viewer URL (waitUntil: load, 60s).
+ *      We use 'load' not 'networkidle' because the ESRI JS app fires continuous
+ *      tile requests that prevent networkidle from ever firing reliably.
+ *   2. Dismiss the county disclaimer modal (button text: "Agree").
+ *   3. Try to close any MapTip/info popup:
+ *        CSS: .close, button:has-text("×"), button:has-text("Close"), .modal-close
+ *   4. Wait for tile imagery to appear in DOM:
+ *        CSS: #map img, .esriMapLayers img, canvas  (30s timeout, ignore if fails)
+ *   5. Wait for networkidle (45s, swallow timeout). At this point the initial
+ *      tile set has loaded, though canvas painting may still be in progress.
+ *   6. Wait 5s extra render buffer. After networkidle, the browser still needs
+ *      time to actually paint the canvas tiles — skipping this gives a grey map.
+ *   7. Try to close the parcel info dialog that auto-opens on load:
+ *        CSS: #InfoDialog .dijitDialogCloseIcon, .dijitDialogCloseIcon
+ *
+ *   PATH A — county's built-in PDF export (preferred):
+ *   8. Click the Print button:
+ *        CSS: #PrintDialog  (Dijit widget button in the ESRI toolbar)
+ *   9. Wait 2s for the print panel to open, then click Export PDF:
+ *        CSS: #exportPDFBtn
+ *  10. Wait 3s for export to start, then wait for the "finished" indicator:
+ *        CSS: #pdfRequestFinished:not([style*="display: none"])  (up to 90s)
+ *      The county export server renders a true georeferenced PDF — slow but high quality.
+ *  11. Wait 1s, then click the download link:
+ *        CSS: #pdfLink
+ *      waitForEvent('download', 60s). Save bytes.
+ *
+ *   PATH B — page.pdf() fallback (if PrintDialog or exportPDFBtn not found):
+ *  12. page.pdf({ format: 'A3', landscape: true, printBackground: true })
+ *      A3 landscape is chosen to match the aspect ratio of the GIS viewer.
+ *
+ *   SIZE VALIDATION:
+ *  13. If bytes < 80KB: the map didn't fully render (county outline only, no tiles).
+ *      Wait 10s, wait for networkidle again, then retry the download or re-capture.
+ *      80KB threshold was calibrated against real captures — a full parcel map
+ *      with aerial imagery is typically 400KB–2MB.
+ *
+ * WHAT CAN BREAK:
+ *   - #PrintDialog, #exportPDFBtn, #pdfRequestFinished, #pdfLink IDs are ESRI
+ *     widget IDs — they'll break if the county upgrades their ESRI viewer version
+ *   - 5s canvas buffer is a guess; slower county servers may need 8–10s
+ *   - 80KB threshold is not universal — very rural parcels with little imagery may be small
+ *   - The county export server sometimes returns a 0-byte file; the fallback handles this
  */
 
 import { writeFile, mkdir } from 'node:fs/promises';
