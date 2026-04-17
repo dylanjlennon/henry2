@@ -29,8 +29,6 @@ export const gisMapFetcher: Fetcher = {
       const page = await context.newPage();
       const url = gisMapViewerUrl(ctx.property.pin);
 
-      // Use 'load' not 'networkidle' — ESRI tile maps make continuous network
-      // requests for map tiles that never settle to networkidle.
       await page.goto(url, { waitUntil: 'load', timeout: 60_000 });
       await dismissModal(page, ['Agree']);
 
@@ -44,16 +42,15 @@ export const gisMapFetcher: Fetcher = {
       try {
         await page.waitForSelector('#map img, .esriMapLayers img, canvas', { timeout: 30_000 });
       } catch { /* proceed anyway */ }
-      await page.waitForTimeout(5_000);
 
-      // Poll until tile requests stabilize
-      for (let i = 0; i < 6; i++) {
-        const before = await tileCount(page);
-        await page.waitForTimeout(2_000);
-        const after = await tileCount(page);
-        if (after === before) break;
-      }
-      await page.waitForTimeout(3_000);
+      // Wait for network to settle. ESRI maps do reach networkidle once the
+      // initial tile set is loaded — this is more reliable than counting
+      // cumulative resource entries (which only ever increases).
+      await page.waitForLoadState('networkidle', { timeout: 45_000 }).catch(() => {});
+
+      // Extra render buffer: after networkidle the browser still needs to
+      // paint canvas tiles. 5s covers the typical Buncombe viewer render lag.
+      await page.waitForTimeout(5_000);
 
       // Close info dialog if it opened after selecting the parcel
       try {
@@ -91,6 +88,27 @@ export const gisMapFetcher: Fetcher = {
         bytes = Buffer.from(await page.pdf({ format: 'A3', printBackground: true, landscape: true }));
       }
 
+      // Validate: a blank capture or county-outline-only PDF is typically < 80 KB.
+      // If too small, wait another 10s and re-capture once.
+      if (bytes.byteLength < 80_000) {
+        await page.waitForTimeout(10_000);
+        await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {});
+        try {
+          const pdfLink = page.locator('#pdfLink').first();
+          if ((await pdfLink.count()) > 0) {
+            const [dl] = await Promise.all([
+              page.waitForEvent('download', { timeout: 30_000 }),
+              pdfLink.click({ timeout: 10_000 }),
+            ]);
+            bytes = await downloadToBuffer(dl);
+          } else {
+            bytes = Buffer.from(await page.pdf({ format: 'A3', printBackground: true, landscape: true }));
+          }
+        } catch {
+          bytes = Buffer.from(await page.pdf({ format: 'A3', printBackground: true, landscape: true }));
+        }
+      }
+
       const filename = `gis-map-${ctx.property.gisPin}.pdf`;
       const artifact = await ctx.run.recorder.putArtifact({
         fetcherCallId: ctx.run.fetcherCallId,
@@ -123,10 +141,3 @@ export const gisMapFetcher: Fetcher = {
   },
 };
 
-async function tileCount(page: import('playwright-core').Page): Promise<number> {
-  return page.evaluate(() =>
-    performance.getEntriesByType('resource')
-      .filter((r) => r.name.includes('arcgis') || r.name.includes('tile') || r.name.includes('MapServer'))
-      .length,
-  ).catch(() => 0);
-}
