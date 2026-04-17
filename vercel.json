@@ -24,6 +24,22 @@
     "api/artifact/[id].ts": {
       "maxDuration": 30,
       "memory": 512
+    },
+    "api/web/search.ts": {
+      "maxDuration": 300,
+      "memory": 1024
+    },
+    "api/web/status/[id].ts": {
+      "maxDuration": 30,
+      "memory": 512
+    },
+    "api/web/history.ts": {
+      "maxDuration": 30,
+      "memory": 512
+    },
+    "api/web/config.ts": {
+      "maxDuration": 10,
+      "memory": 256
     }
   }
 }

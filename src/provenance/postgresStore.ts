@@ -28,7 +28,7 @@ import {
   Run,
   RunTrace,
 } from './schema.js';
-import type { ProvenanceStore } from './store.js';
+import type { ProvenanceStore, WebRunStatus, WebRunRow } from './store.js';
 
 export interface PostgresProvenanceStoreOptions {
   pool: Pool;
@@ -46,8 +46,8 @@ export class PostgresProvenanceStore implements ProvenanceStore {
     await this.pool.query(
       `INSERT INTO invocations (
          id, trigger, slack_team_id, slack_user_id, slack_channel_id,
-         slack_channel_name, slack_thread_ts, raw_input, created_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         slack_channel_name, slack_thread_ts, raw_input, created_at, ip_hash
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT (id) DO UPDATE SET
          trigger = EXCLUDED.trigger,
          slack_team_id = EXCLUDED.slack_team_id,
@@ -55,10 +55,12 @@ export class PostgresProvenanceStore implements ProvenanceStore {
          slack_channel_id = EXCLUDED.slack_channel_id,
          slack_channel_name = EXCLUDED.slack_channel_name,
          slack_thread_ts = EXCLUDED.slack_thread_ts,
-         raw_input = EXCLUDED.raw_input`,
+         raw_input = EXCLUDED.raw_input,
+         ip_hash = EXCLUDED.ip_hash`,
       [
         inv.id, inv.trigger, inv.slackTeamId, inv.slackUserId, inv.slackChannelId,
         inv.slackChannelName, inv.slackThreadTs, inv.rawInput, inv.createdAt,
+        inv.ipHash ?? null,
       ],
     );
   }
@@ -233,6 +235,91 @@ export class PostgresProvenanceStore implements ProvenanceStore {
       [limit, offset],
     );
     return res.rows.map(runFromRow);
+  }
+
+  async getWebRunStatus(runId: string): Promise<WebRunStatus | null> {
+    const runRes = await this.pool.query(
+      `SELECT r.id, r.status, r.pin, r.address, r.owner_name,
+              r.fetchers_total, r.fetchers_completed, r.fetchers_failed,
+              r.started_at, r.duration_ms
+       FROM runs r
+       JOIN invocations i ON r.invocation_id = i.id
+       WHERE r.id = $1 AND i.trigger = 'web'`,
+      [runId],
+    );
+    if (runRes.rowCount === 0) return null;
+    const row = runRes.rows[0];
+
+    const [fcRes, artRes] = await Promise.all([
+      this.pool.query(
+        `SELECT fetcher_id, status FROM fetcher_calls WHERE run_id = $1`,
+        [runId],
+      ),
+      this.pool.query(
+        `SELECT id, label, content_type, bytes FROM artifacts WHERE run_id = $1 ORDER BY created_at ASC`,
+        [runId],
+      ),
+    ]);
+
+    const fetcherStatuses: Record<string, string> = {};
+    for (const fc of fcRes.rows) fetcherStatuses[fc.fetcher_id] = fc.status;
+
+    return {
+      runId: String(row.id),
+      status: row.status,
+      pin: row.pin,
+      address: row.address ?? null,
+      ownerName: row.owner_name ?? null,
+      fetchersPlanned: Number(row.fetchers_total),
+      fetchersCompleted: Number(row.fetchers_completed),
+      fetchersFailed: Number(row.fetchers_failed),
+      startedAt: iso(row.started_at),
+      durationMs: row.duration_ms == null ? null : Number(row.duration_ms),
+      artifacts: artRes.rows.map((a) => ({
+        id: String(a.id),
+        label: String(a.label),
+        contentType: String(a.content_type),
+        bytes: Number(a.bytes),
+      })),
+      fetcherStatuses,
+    };
+  }
+
+  async listWebRuns(opts: { limit?: number; cursor?: string } = {}): Promise<WebRunRow[]> {
+    const limit = Math.min(opts.limit ?? 50, 100);
+    const res = await this.pool.query(
+      `SELECT r.id, r.pin, r.address, r.status,
+              r.fetchers_total, r.fetchers_completed,
+              r.artifacts_produced, r.duration_ms, r.started_at
+       FROM runs r
+       JOIN invocations i ON r.invocation_id = i.id
+       WHERE i.trigger = 'web'
+         ${opts.cursor ? `AND r.started_at < $2` : ''}
+       ORDER BY r.started_at DESC
+       LIMIT $1`,
+      opts.cursor ? [limit, opts.cursor] : [limit],
+    );
+    return res.rows.map((row) => ({
+      runId: String(row.id),
+      address: row.address ?? null,
+      pin: String(row.pin),
+      status: String(row.status),
+      fetchersCompleted: Number(row.fetchers_completed),
+      fetchersPlanned: Number(row.fetchers_total),
+      artifactsProduced: Number(row.artifacts_produced),
+      durationMs: row.duration_ms == null ? null : Number(row.duration_ms),
+      startedAt: iso(row.started_at),
+    }));
+  }
+
+  async countRecentWebRunsByIp(ipHash: string, sinceMs: number): Promise<number> {
+    const since = new Date(Date.now() - sinceMs).toISOString();
+    const res = await this.pool.query(
+      `SELECT COUNT(*) AS cnt FROM invocations
+       WHERE trigger = 'web' AND ip_hash = $1 AND created_at > $2`,
+      [ipHash, since],
+    );
+    return Number(res.rows[0]?.cnt ?? 0);
   }
 }
 

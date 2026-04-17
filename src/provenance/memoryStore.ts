@@ -16,7 +16,7 @@ import type {
   Run,
   RunTrace,
 } from './schema.js';
-import type { ProvenanceStore, ArtifactStore } from './store.js';
+import type { ProvenanceStore, ArtifactStore, WebRunStatus, WebRunRow } from './store.js';
 
 export class MemoryProvenanceStore implements ProvenanceStore {
   private invocations = new Map<string, Invocation>();
@@ -55,6 +55,10 @@ export class MemoryProvenanceStore implements ProvenanceStore {
     const all = [...this.runs.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
     return all.slice(opts.offset ?? 0, (opts.offset ?? 0) + (opts.limit ?? 50));
   }
+
+  async getWebRunStatus(_runId: string): Promise<WebRunStatus | null> { return null; }
+  async listWebRuns(_opts?: { limit?: number; cursor?: string }): Promise<WebRunRow[]> { return []; }
+  async countRecentWebRunsByIp(_ipHash: string, _sinceMs: number): Promise<number> { return 0; }
 }
 
 /** Filesystem-backed artifact store. Writes to `${root}/${runId}/${filename}`. */

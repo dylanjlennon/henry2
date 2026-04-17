@@ -34,6 +34,45 @@ export interface ProvenanceStore {
   getArtifact(id: string): Promise<Artifact | null>;
   getRunTrace(runId: string): Promise<RunTrace | null>;
   listRuns(opts?: { limit?: number; offset?: number }): Promise<Run[]>;
+
+  /** Web-UI-specific queries — implemented by Postgres store, stubbed in memory store. */
+  getWebRunStatus(runId: string): Promise<WebRunStatus | null>;
+  listWebRuns(opts?: { limit?: number; cursor?: string }): Promise<WebRunRow[]>;
+  countRecentWebRunsByIp(ipHash: string, sinceMs: number): Promise<number>;
+}
+
+/** Compact status object for the web UI polling endpoint. */
+export interface WebRunStatus {
+  runId: string;
+  status: 'running' | 'completed' | 'partial' | 'failed';
+  pin: string;
+  address: string | null;
+  ownerName: string | null;
+  fetchersPlanned: number;
+  fetchersCompleted: number;
+  fetchersFailed: number;
+  startedAt: string;
+  durationMs: number | null;
+  artifacts: Array<{
+    id: string;
+    label: string;
+    contentType: string;
+    bytes: number;
+  }>;
+  fetcherStatuses: Record<string, string>;
+}
+
+/** One row in the public history list. */
+export interface WebRunRow {
+  runId: string;
+  address: string | null;
+  pin: string;
+  status: string;
+  fetchersCompleted: number;
+  fetchersPlanned: number;
+  artifactsProduced: number;
+  durationMs: number | null;
+  startedAt: string;
 }
 
 export interface ArtifactStore {
