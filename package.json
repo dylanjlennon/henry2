@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
+    "test:e2e": "vitest run tests/e2e",
     "lint": "tsc --noEmit",
     "resolve": "tsx scripts/resolve.ts",
     "fetch": "tsx scripts/fetch.ts"
