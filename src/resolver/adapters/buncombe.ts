@@ -197,6 +197,103 @@ export async function searchAddress(
   return [];
 }
 
+/**
+ * Look up a specific condo/townhome unit by street address + unit number.
+ *
+ * Queries the parcel layer directly using HouseNumber + StreetName + CondoUnit,
+ * bypassing the address-point layer and spatial lookup entirely.
+ *
+ * The county stores unit numbers in the CondoUnit field exactly as recorded
+ * (e.g. "3", "1001", "A101"). We try the raw value AND a numeric-stripped
+ * version (e.g. "03" → "3") to handle zero-padding differences.
+ */
+export async function lookupParcelByAddressUnit(
+  houseNumber: string,
+  streetName: string,
+  streetType: string | undefined,
+  unit: string,
+  opts: GisQueryOptions = {},
+): Promise<ParcelHit | null> {
+  const hn = houseNumber.replace(/'/g, "''");
+  const sn = streetName.replace(/'/g, "''").toUpperCase();
+  const unitRaw = unit.replace(/'/g, "''");
+  const unitNumeric = String(Number(unit)) !== 'NaN' ? String(Number(unit)) : null;
+
+  // Try: exact unit match, then numeric-normalized unit
+  const unitVariants = [unitRaw, ...(unitNumeric && unitNumeric !== unitRaw ? [unitNumeric] : [])];
+
+  for (const u of unitVariants) {
+    let where = `UPPER(HouseNumber)='${hn}' AND UPPER(StreetName)='${sn}' AND UPPER(CondoUnit)='${u.toUpperCase()}'`;
+    if (streetType) {
+      const st = streetType.replace(/'/g, "''").toUpperCase();
+      where = `UPPER(HouseNumber)='${hn}' AND UPPER(StreetName)='${sn}' AND UPPER(StreetType)='${st}' AND UPPER(CondoUnit)='${u.toUpperCase()}'`;
+    }
+    const url = `${PARCEL_URL}?${new URLSearchParams({
+      where,
+      outFields: '*',
+      returnGeometry: 'true',
+      outSR: '4326',
+      f: 'json',
+      resultRecordCount: '1',
+    })}`;
+    try {
+      const data = await httpJson<ArcGisResponse<ParcelAttributes>>(url, {
+        recorder: opts.recorder,
+        fetcherCallId: opts.fetcherCallId ?? null,
+        sourceLabel: 'buncombe.parcel.unit',
+      });
+      const f = data.features?.[0];
+      if (f) return { attributes: f.attributes, geometry: f.geometry, centroid: pickCentroid(f.geometry) };
+    } catch { /* try next variant */ }
+  }
+  return null;
+}
+
+/**
+ * Find all condo/townhome unit parcels at a given street address.
+ * Used to detect when a user searched for a condo building without specifying a unit,
+ * so we can show them which units exist.
+ *
+ * Returns only parcels whose PIN contains "C" (condo unit indicator).
+ */
+export async function findCondoUnitsAtAddress(
+  houseNumber: string,
+  streetName: string,
+  streetType: string | undefined,
+  opts: GisQueryOptions = {},
+): Promise<Array<{ pin: string; condoUnit: string; owner: string }>> {
+  const hn = houseNumber.replace(/'/g, "''");
+  const sn = streetName.replace(/'/g, "''").toUpperCase();
+  let where = `UPPER(HouseNumber)='${hn}' AND UPPER(StreetName)='${sn}' AND PIN LIKE '%C%'`;
+  if (streetType) {
+    const st = streetType.replace(/'/g, "''").toUpperCase();
+    where = `UPPER(HouseNumber)='${hn}' AND UPPER(StreetName)='${sn}' AND UPPER(StreetType)='${st}' AND PIN LIKE '%C%'`;
+  }
+  const url = `${PARCEL_URL}?${new URLSearchParams({
+    where,
+    outFields: 'PIN,CondoUnit,Owner',
+    returnGeometry: 'false',
+    f: 'json',
+    resultRecordCount: '100',
+  })}`;
+  try {
+    const data = await httpJson<ArcGisResponse<ParcelAttributes>>(url, {
+      recorder: opts.recorder,
+      fetcherCallId: opts.fetcherCallId ?? null,
+      sourceLabel: 'buncombe.parcel.condo-units',
+    });
+    return (data.features ?? [])
+      .map((f) => ({
+        pin: String(f.attributes.PIN ?? ''),
+        condoUnit: String(f.attributes.CondoUnit ?? ''),
+        owner: String(f.attributes.Owner ?? f.attributes.OwnerName ?? ''),
+      }))
+      .filter((u) => u.condoUnit); // skip common-area records with no CondoUnit
+  } catch {
+    return [];
+  }
+}
+
 function pickCentroid(geom: unknown): { lon: number; lat: number } | undefined {
   if (!geom || typeof geom !== 'object') return undefined;
   const g = geom as Record<string, unknown>;

@@ -23,8 +23,10 @@ export interface NormalizedPin {
   isCondo: boolean;
 }
 
-// e.g. "9741602763C0004" (after stripping dashes/spaces)
-const CONDO_RE = /^\d{10}C\d{4}$/i;
+// e.g. "9741602763C0004", "9649402414C1001", "9649402414COOC1", "9649402414CG104"
+// The county uses C + up to 6 alphanumeric chars to encode unit, building,
+// parking, garage, and common-area identifiers.
+const CONDO_RE = /^\d{10}C[A-Z0-9]{1,6}$/i;
 // e.g. "974160276300000"
 const STANDARD_RE = /^\d{15}$/;
 

@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { waitUntil } from '@vercel/functions';
-import { resolveProperty, ResolveError } from '../../src/resolver/index.js';
+import { resolveProperty, ResolveError, type ResolveErrorCode } from '../../src/resolver/index.js';
 import { ALL_FETCHERS } from '../../src/orchestrator/fetchers.js';
 import { makeProvenanceStack } from '../../src/provenance/factory.js';
 import { ProvenanceRecorder } from '../../src/provenance/recorder.js';
@@ -74,10 +74,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   try {
     property = await resolveProperty({ raw: address, county: 'buncombe' });
   } catch (err) {
-    const msg = err instanceof ResolveError
-      ? err.message
-      : 'Could not resolve this address in Buncombe County, NC. Henry currently covers Buncombe County only — try a full street address like "546 Old Haw Creek Rd" or a 15-digit PIN.';
-    res.status(422).json({ error: msg });
+    if (err instanceof ResolveError) {
+      res.status(422).json({ error: err.message, code: err.code });
+    } else {
+      res.status(422).json({
+        error: 'Could not resolve this address in Buncombe County, NC. Henry currently covers Buncombe County only — try a full street address like "546 Old Haw Creek Rd" or a 15-digit PIN.',
+        code: 'address_not_found' as ResolveErrorCode,
+      });
+    }
     return;
   }
 

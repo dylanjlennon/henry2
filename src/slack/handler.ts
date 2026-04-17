@@ -16,7 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { WebClient } from '@slack/web-api';
-import { resolveProperty, ResolveError } from '../resolver/index.js';
+import { resolveProperty, ResolveError, type ResolveErrorCode } from '../resolver/index.js';
 import { runFetchers } from '../orchestrator/index.js';
 import { ALL_FETCHERS } from '../orchestrator/fetchers.js';
 import { inferPropertyFromChannelName } from './channelName.js';
@@ -109,10 +109,11 @@ export async function handleHenryInvocation(input: InvocationInput): Promise<voi
     property = await resolveProperty({ raw: propertyInput.raw, county: 'buncombe' });
   } catch (err) {
     const msg = err instanceof ResolveError ? err.message : (err as Error).message;
+    const code = err instanceof ResolveError ? err.code : 'address_not_found' as ResolveErrorCode;
     await slack.chat.postMessage({
       channel: channelId,
       thread_ts: threadTs,
-      text: `:x: *Could not resolve property*\n${msg}\n\n_Try a full street address or a 15-digit PIN._`,
+      text: renderResolveError(propertyInput.raw, msg, code),
     });
     hlog.warn('resolve_failed', { err: msg });
     return;
@@ -232,7 +233,25 @@ export async function handleHenryInvocation(input: InvocationInput): Promise<voi
 
 // ---------------------------------------------------------------------------
 // Rendering helpers
-// ---------------------------------------------------------------------------
+
+function renderResolveError(raw: string, msg: string, code: ResolveErrorCode): string {
+  switch (code) {
+    case 'condo_unit_required':
+      return `:office: *Condo or multi-unit building — please specify a unit*\n${msg}`;
+    case 'condo_unit_not_found':
+      return `:x: *Unit not found*\n${msg}`;
+    case 'house_number_not_in_gis':
+      return `:x: *Address not in county parcel records*\n${msg}`;
+    case 'pin_not_found':
+      return `:x: *PIN not found*\n${msg}`;
+    case 'parcel_link_failed':
+      return `:warning: *Address found but could not link to a parcel*\n${msg}`;
+    case 'county_not_supported':
+      return `:x: *Outside coverage area*\n${msg}`;
+    default:
+      return `:x: *Could not resolve "${raw}"*\n${msg}\n\n_Try a full street address like "546 Old Haw Creek Rd" or a 15-digit PIN._`;
+  }
+}
 
 function renderPropertyCard(p: CanonicalProperty, runId: string): string {
   const lines = [`:pushpin: *${p.pin}*`];
