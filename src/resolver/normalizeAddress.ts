@@ -242,8 +242,10 @@ export function normalizeAddress(raw: string): NormalizedAddress {
     canonical,
     // Without unit/state/zip extras
     [result.houseNumber, result.streetName, result.streetType].filter(Boolean).join(' ').trim(),
-    // Just street name + type (in case house number is wrong)
-    [result.streetName, result.streetType].filter(Boolean).join(' ').trim(),
+    // Street name + type only — omit when a house number is present because this
+    // matches every address on the street, causing pickBestHit to return a wrong
+    // neighbor when the exact house number isn't in the GIS layer.
+    ...(!result.houseNumber ? [[result.streetName, result.streetType].filter(Boolean).join(' ').trim()] : []),
     // Just the cleaned input as a last resort
     cleaned,
   ].filter(Boolean));

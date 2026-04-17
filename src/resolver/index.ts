@@ -51,15 +51,23 @@ async function resolveAddress(raw: string): Promise<CanonicalProperty> {
       `Could not resolve address "${raw}". Tried forms: ${normalized.queryForms.join(' | ')}`,
     );
   }
-  // Prefer exact-house-number match if present
+  // Prefer exact-house-number match. pickBestHit returns null when results
+  // exist but none match the desired house number (e.g. street-only query
+  // returned neighbors). Treat that the same as no results.
   const best = pickBestHit(hits, normalized.houseNumber);
+  if (!best) {
+    throw new ResolveError(
+      `Could not find house number ${normalized.houseNumber} in Buncombe County GIS. ` +
+      `The address may not be recorded or may use a different number.`,
+    );
+  }
 
   // The address-points layer doesn't carry a PIN attribute — we have to look
   // up the parcel by either (a) attached PIN if present, or (b) spatial query
   // using the address point's coordinates.
   let parcel: ParcelHit | null = null;
-  const attachedPin = String(best.attributes.PIN ?? best.attributes.PINNUM ?? '').replace(/\D/g, '');
-  if (attachedPin && attachedPin.length === 15) {
+  const attachedPin = String(best.attributes.PIN ?? best.attributes.PINNUM ?? '').replace(/[-\s]/g, '').toUpperCase();
+  if (attachedPin && looksLikePin(attachedPin)) {
     parcel = await lookupParcelByPin(attachedPin);
   }
   if (!parcel && best.centroid) {
@@ -71,10 +79,13 @@ async function resolveAddress(raw: string): Promise<CanonicalProperty> {
       `but could not link to a parcel record.`,
     );
   }
-  const pin = String(parcel.attributes.PIN ?? parcel.attributes.PINNUM ?? '').replace(/\D/g, '');
-  if (!pin || pin.length !== 15) {
+  // Preserve condo PINs (e.g. "9741602763C0004") — do NOT strip all non-digits.
+  // Only strip dashes/spaces that may appear in user-copied PIN strings.
+  const rawPin = String(parcel.attributes.PIN ?? parcel.attributes.PINNUM ?? '').replace(/[-\s]/g, '').toUpperCase();
+  if (!looksLikePin(rawPin)) {
     throw new ResolveError(`Parcel record has no valid PIN: ${JSON.stringify(parcel.attributes)}`);
   }
+  const pin = rawPin;
   const { displayPin } = normalizePin(pin);
   const confidence = computeConfidence(hits.length, best, normalized);
   const source = confidence >= 0.95 ? 'address-exact' : 'address-fuzzy';
@@ -85,10 +96,13 @@ async function resolveAddress(raw: string): Promise<CanonicalProperty> {
   return parcelToCanonical(parcel, pin, displayPin, confidence, source, fallbackAddress);
 }
 
-function pickBestHit(hits: AddressHit[], desiredHouseNumber?: string): AddressHit {
-  if (!desiredHouseNumber) return hits[0];
+function pickBestHit(hits: AddressHit[], desiredHouseNumber?: string): AddressHit | null {
+  if (!desiredHouseNumber) return hits[0] ?? null;
   const exact = hits.find((h) => String(h.attributes.HouseNumber) === desiredHouseNumber);
-  return exact ?? hits[0];
+  // If we have a desired house number but no exact match, return null so the
+  // caller can continue trying other query forms rather than silently using a
+  // neighbor's address (e.g. returning 188 when 190 was requested).
+  return exact ?? null;
 }
 
 function computeConfidence(
