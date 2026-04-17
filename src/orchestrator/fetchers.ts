@@ -18,12 +18,30 @@ import { simplicityPropertyFetcher } from '../fetchers/simplicityProperty.js';
 import { ashevillePermitsFetcher } from '../fetchers/ashevillePermits.js';
 import { sewerMapFetcher } from '../fetchers/sewerMap.js';
 import { slopeFetcher } from '../fetchers/slope.js';
+import { adjacentParcelsFetcher } from '../fetchers/adjacentParcels.js';
+import { jurisdictionFetcher } from '../fetchers/jurisdiction.js';
+import { historicDistrictFetcher } from '../fetchers/historicDistrict.js';
+import { landslideHazardFetcher } from '../fetchers/landslideHazard.js';
+import { strEligibilityFetcher } from '../fetchers/strEligibility.js';
+import { nationalRiskIndexFetcher } from '../fetchers/nationalRiskIndex.js';
+import { soilSepticFetcher } from '../fetchers/soilSeptic.js';
 
 export const ALL_FETCHERS: Fetcher[] = [
   // REST fetchers — fast, always run
   parcelJsonFetcher,
   femaFloodFetcher,
   septicFetcher,
+  // REST fetchers — property context
+  jurisdictionFetcher,
+  adjacentParcelsFetcher,
+  historicDistrictFetcher,
+  slopeFetcher,
+  // REST fetchers — hazard & risk
+  landslideHazardFetcher,
+  nationalRiskIndexFetcher,
+  soilSepticFetcher,
+  // REST fetchers — regulatory
+  strEligibilityFetcher,
   // Browser fetchers — property record & valuation
   propertyCardFetcher,
   taxBillFetcher,
@@ -34,7 +52,6 @@ export const ALL_FETCHERS: Fetcher[] = [
   gisMapFetcher,
   firmetteFetcher,
   sewerMapFetcher,
-  slopeFetcher,
   // Browser fetchers — permits
   buncombePermitsFetcher,
   simplicityPropertyFetcher,

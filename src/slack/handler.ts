@@ -321,6 +321,73 @@ function renderFetcherResult(result: FetcherResult): string | null {
     return `${icon} *Septic / sewer* — ${statusLabel}`;
   }
 
+  if (result.fetcher === 'jurisdiction') {
+    const icon = d.isAsheville ? ':city_sunrise:' : ':house:';
+    return `${icon} *Jurisdiction* — ${d.jurisdiction}`;
+  }
+
+  if (result.fetcher === 'adjacent-parcels') {
+    const neighbors = (d.neighbors ?? []) as Array<{ pin: string; owner: string; address: string }>;
+    if (neighbors.length === 0) return ':busts_in_silhouette: *Adjacent owners* — none found';
+    const lines = [`:busts_in_silhouette: *Adjacent owners* (${neighbors.length})`];
+    for (const n of neighbors) {
+      const addr = n.address ? ` — ${n.address}` : '';
+      lines.push(`  • ${n.owner}${addr}`);
+    }
+    return lines.join('\n');
+  }
+
+  if (result.fetcher === 'historic-district') {
+    if (d.inLocalHistoricDistrict) {
+      return `:classical_building: *Historic district* — ${d.districtName ?? 'Local historic district'} _(Certificate of Appropriateness required for exterior changes)_`;
+    }
+    return ':classical_building: *Historic district* — Not in a local historic district';
+  }
+
+  if (result.fetcher === 'slope') {
+    const lines = [':mountain: *Elevation & slope*'];
+    if (d.elevationFt != null) lines.push(`  • Elevation: ${d.elevationFt} ft`);
+    if (d.slopePct != null) lines.push(`  • Slope: ${d.slopePct}%${d.slopeDeg != null ? ` (${d.slopeDeg}°)` : ''}`);
+    return lines.length > 1 ? lines.join('\n') : null;
+  }
+
+  if (result.fetcher === 'landslide-hazard') {
+    const risk = String(d.riskLevel ?? 'none');
+    const icon = risk === 'high' ? ':rotating_light:' : risk === 'moderate' ? ':warning:' : ':white_check_mark:';
+    const lines = [`${icon} *Landslide hazard* — ${risk.charAt(0).toUpperCase() + risk.slice(1)} risk`];
+    if (d.stabilityLabel) lines.push(`  • Stability index: ${d.stabilityLabel}`);
+    if (Number(d.debrisFlowCount) > 0) lines.push(`  • Debris flow deposits: ${d.debrisFlowCount} polygon(s) intersect parcel`);
+    if (Number(d.slopeMovementCount) > 0) lines.push(`  • Slope movement zones: ${d.slopeMovementCount} intersect parcel`);
+    if (Number(d.nearbyLandslideCount) > 0) lines.push(`  • Historical landslides within 200 ft: ${d.nearbyLandslideCount}`);
+    return lines.join('\n');
+  }
+
+  if (result.fetcher === 'national-risk-index') {
+    const lines = [`:bar_chart: *FEMA National Risk Index* — ${d.compositeRating ?? 'N/A'}${d.compositeScore != null ? ` (score: ${d.compositeScore})` : ''}`];
+    const topHazards = d.topHazards as string[] | undefined;
+    if (topHazards && topHazards.length > 0) {
+      lines.push(`  • Highest-risk hazards: ${topHazards.slice(0, 5).join(', ')}`);
+    }
+    return lines.join('\n');
+  }
+
+  if (result.fetcher === 'soil-septic') {
+    const lines = [':seedling: *Soil & septic (SSURGO)*'];
+    if (d.mapUnitName) lines.push(`  • Soil: ${d.mapUnitName}${d.componentName ? ` (${d.componentName})` : ''}`);
+    if (d.texture) lines.push(`  • Texture: ${d.texture}`);
+    if (d.septicRating) {
+      const icon = d.septicRating === 'Not limited' ? ':white_check_mark:' : d.septicRating === 'Very limited' ? ':x:' : ':warning:';
+      lines.push(`  • Septic suitability: ${icon} ${d.septicRating}`);
+    }
+    return lines.length > 1 ? lines.join('\n') : null;
+  }
+
+  if (result.fetcher === 'str-eligibility') {
+    const eligible = d.eligible;
+    const icon = eligible === true ? ':white_check_mark:' : eligible === false ? ':x:' : ':question:';
+    return `${icon} *STR eligibility* — ${d.summary}`;
+  }
+
   // Artifact-only fetchers (PDFs): no inline text needed.
   return null;
 }
