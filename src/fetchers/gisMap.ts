@@ -1,69 +1,55 @@
 /**
- * gisMap — exports the Buncombe County GIS viewer map as a PDF.
+ * gisMap — exports the Buncombe County GIS parcel map as a PDF.
  *
  * TARGET URL:
- *   https://gis.buncombenc.gov/buncomap/Default.aspx?PINN={displayPin}
- *   (Built by gisMapViewerUrl() in src/sources/buncombe.ts)
- *   This is the county's own ESRI-powered interactive map viewer.
- *   The PINN parameter zooms and highlights the parcel on load.
+ *   https://gis.buncombecounty.org/buncomap/
+ *   (Base URL; we search for the PIN inside the app rather than using URL params,
+ *    because the PINN= query param does not reliably set the zoom level.)
  *
  * FLOW:
- *   1. Navigate to the viewer URL (waitUntil: load, 60s).
- *      We use 'load' not 'networkidle' because the ESRI JS app fires continuous
- *      tile requests that prevent networkidle from ever firing reliably.
- *   2. Dismiss the county disclaimer modal (button text: "Agree").
- *   3. Try to close any MapTip/info popup:
- *        CSS: .close, button:has-text("×"), button:has-text("Close"), .modal-close
- *   4. Wait for tile imagery to appear in DOM:
- *        CSS: #map img, .esriMapLayers img, canvas  (30s timeout, ignore if fails)
- *   5. Wait for networkidle (45s, swallow timeout). At this point the initial
- *      tile set has loaded, though canvas painting may still be in progress.
- *   6. Wait 5s extra render buffer. After networkidle, the browser still needs
- *      time to actually paint the canvas tiles — skipping this gives a grey map.
- *   7. Try to close the parcel info dialog that auto-opens on load:
- *        CSS: #InfoDialog .dijitDialogCloseIcon, .dijitDialogCloseIcon
+ *   1. Navigate to base URL (waitUntil: domcontentloaded, 60s).
+ *   2. Wait for map container: #viewDiv (20s) and networkidle (30s).
+ *   3. Dismiss disclaimer modal (button text: "Agree").
+ *   4. Dismiss InfoDialog if it auto-opens:
+ *        CSS: #InfoDialog button, .dijitDialogCloseIcon
+ *        Also remove the underlay via JS if needed.
+ *   5. Find the search widget across all frames and type the cleaned PIN (no hyphens).
+ *      Try selectors: .esri-search__input, input[placeholder*="Search"], input[type="text"]
+ *   6. Press Enter, wait 10s for map to pan/zoom to parcel.
+ *   7. Force zoom to level 17 via JS: window.map.setZoom(17) or window.map.setLevel(17).
+ *      Zoom 17 shows the parcel clearly with ~2-3 block radius of surrounding context.
+ *   8. Wait 8s render buffer — after zoom, tiles repaint asynchronously.
+ *   9. Wait for networkidle (30s), then 5s extra buffer.
+ *  10. Take a full-viewport screenshot (not page.pdf() — switching to print mode
+ *      shifts the map viewport, producing a county-outline-only capture).
+ *  11. Embed the screenshot PNG into a Landscape Letter PDF using browser canvas:
+ *        page.evaluate() draws the image onto a canvas and exports PDF bytes.
+ *      Fallback: page.pdf(A3 landscape) if screenshot embed fails.
  *
- *   PATH A — county's built-in PDF export (preferred):
- *   8. Click the Print button:
- *        CSS: #PrintDialog  (Dijit widget button in the ESRI toolbar)
- *   9. Wait 2s for the print panel to open, then click Export PDF:
- *        CSS: #exportPDFBtn
- *  10. Wait 3s for export to start, then wait for the "finished" indicator:
- *        CSS: #pdfRequestFinished:not([style*="display: none"])  (up to 90s)
- *      The county export server renders a true georeferenced PDF — slow but high quality.
- *  11. Wait 1s, then click the download link:
- *        CSS: #pdfLink
- *      waitForEvent('download', 60s). Save bytes.
- *
- *   PATH B — page.pdf() fallback (if PrintDialog or exportPDFBtn not found):
- *  12. page.pdf({ format: 'A3', landscape: true, printBackground: true })
- *      A3 landscape is chosen to match the aspect ratio of the GIS viewer.
- *
- *   SIZE VALIDATION:
- *  13. If bytes < 80KB: the map didn't fully render (county outline only, no tiles).
- *      Wait 10s, wait for networkidle again, then retry the download or re-capture.
- *      80KB threshold was calibrated against real captures — a full parcel map
- *      with aerial imagery is typically 400KB–2MB.
+ * SIZE VALIDATION:
+ *  12. If bytes < 80 KB the map didn't fully render. Wait 10s more and retry screenshot.
+ *      80 KB calibrated from real captures — a zoomed parcel map with aerial tiles
+ *      is typically 400 KB – 2 MB; the blank county-outline is ~35 KB.
  *
  * WHAT CAN BREAK:
- *   - #PrintDialog, #exportPDFBtn, #pdfRequestFinished, #pdfLink IDs are ESRI
- *     widget IDs — they'll break if the county upgrades their ESRI viewer version
- *   - 5s canvas buffer is a guess; slower county servers may need 8–10s
- *   - 80KB threshold is not universal — very rural parcels with little imagery may be small
- *   - The county export server sometimes returns a 0-byte file; the fallback handles this
+ *   - window.map.setZoom / setLevel: ESRI 3.x API; breaks if county upgrades to 4.x (use view.zoom= instead)
+ *   - Search widget selectors (.esri-search__input) change between ESRI versions
+ *   - 8s tile render buffer may need 12-15s on slow county servers
+ *   - The InfoDialog DOM IDs are Dijit widget IDs; they change on ESRI upgrade
  */
 
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Fetcher, FetcherContext, FetcherResult } from '../types.js';
-import { launchBrowser, dismissModal, downloadToBuffer } from '../lib/browser.js';
-import { gisMapViewerUrl } from '../sources/buncombe.js';
+import { launchBrowser, dismissModal, cleanPIN } from '../lib/browser.js';
+
+const MAP_URL = 'https://gis.buncombecounty.org/buncomap/';
 
 export const gisMapFetcher: Fetcher = {
   id: 'gis-map',
   name: 'GIS parcel map (Buncombe)',
   counties: ['buncombe'],
-  estimatedMs: 60_000,
+  estimatedMs: 90_000,
   needsBrowser: true,
 
   async run(ctx: FetcherContext): Promise<FetcherResult> {
@@ -72,88 +58,124 @@ export const gisMapFetcher: Fetcher = {
 
     const browser = await launchBrowser(ctx.signal);
     try {
-      const context = await browser.newContext({ viewport: { width: 1400, height: 1000 }, acceptDownloads: true });
+      const context = await browser.newContext({
+        viewport: { width: 1600, height: 1200 },
+        acceptDownloads: true,
+      });
       const page = await context.newPage();
-      const url = gisMapViewerUrl(ctx.property.pin);
 
-      await page.goto(url, { waitUntil: 'load', timeout: 60_000 });
-      await dismissModal(page, ['Agree']);
+      // Step 1: Load base map URL
+      await page.goto(MAP_URL, { waitUntil: 'domcontentloaded', timeout: 60_000 });
 
-      // Close any MapTip or info modals
-      try {
-        const closeBtn = page.locator('.close, button:has-text("×"), button:has-text("Close"), .modal-close').first();
-        if ((await closeBtn.count()) > 0) await closeBtn.click({ timeout: 5_000 });
-      } catch { /* ignore */ }
-
-      // Wait for tile imagery to appear
-      try {
-        await page.waitForSelector('#map img, .esriMapLayers img, canvas', { timeout: 30_000 });
-      } catch { /* proceed anyway */ }
-
-      // Wait for network to settle. ESRI maps do reach networkidle once the
-      // initial tile set is loaded — this is more reliable than counting
-      // cumulative resource entries (which only ever increases).
-      await page.waitForLoadState('networkidle', { timeout: 45_000 }).catch(() => {});
-
-      // Extra render buffer: after networkidle the browser still needs to
-      // paint canvas tiles. 5s covers the typical Buncombe viewer render lag.
+      // Step 2: Wait for map container and network to settle
+      try { await page.waitForSelector('#viewDiv', { state: 'visible', timeout: 20_000 }); } catch { /* proceed */ }
+      await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
       await page.waitForTimeout(5_000);
 
-      // Close info dialog if it opened after selecting the parcel
+      // Step 3: Dismiss disclaimer
+      await dismissModal(page, ['Agree', 'Accept', 'OK']);
+
+      // Step 4: Dismiss InfoDialog
       try {
-        const closeDialog = page.locator('#InfoDialog .dijitDialogCloseIcon, .dijitDialogCloseIcon').first();
-        if ((await closeDialog.count()) > 0) await closeDialog.click({ timeout: 5_000 });
+        const infoVisible = await page.locator('#InfoDialog').isVisible({ timeout: 3_000 }).catch(() => false);
+        if (infoVisible) {
+          const closeBtn = page.locator('#InfoDialog button, #InfoDialog .dijitDialogCloseIcon').first();
+          if ((await closeBtn.count()) > 0) await closeBtn.click({ timeout: 3_000 });
+          // Also nuke the underlay via JS in case it blocks interaction
+          await page.evaluate(() => {
+            const underlay = document.querySelector('#InfoDialog_underlay, .dijitDialogUnderlay') as HTMLElement | null;
+            if (underlay) underlay.remove();
+            const dialog = document.querySelector('#InfoDialog') as HTMLElement | null;
+            if (dialog) dialog.style.display = 'none';
+          });
+          await page.waitForTimeout(1_000);
+        }
       } catch { /* ignore */ }
 
-      let bytes: Buffer;
-
-      try {
-        const printDialog = page.locator('#PrintDialog').first();
-        if ((await printDialog.count()) === 0) throw new Error('PrintDialog not found');
-
-        await printDialog.click({ timeout: 10_000 });
-        await page.waitForTimeout(2_000);
-
-        const exportBtn = page.locator('#exportPDFBtn').first();
-        if ((await exportBtn.count()) === 0) throw new Error('exportPDFBtn not found');
-
-        await exportBtn.click({ timeout: 10_000 });
-        await page.waitForTimeout(3_000);
-
-        // Wait for the export to finish (county export can be slow)
-        await page.waitForSelector('#pdfRequestFinished:not([style*="display: none"])', { timeout: 90_000 });
-        await page.waitForTimeout(1_000);
-
-        const pdfLink = page.locator('#pdfLink').first();
-        const [download] = await Promise.all([
-          page.waitForEvent('download', { timeout: 60_000 }),
-          pdfLink.click({ timeout: 10_000 }),
-        ]);
-        bytes = await downloadToBuffer(download);
-      } catch {
-        // Fall back: capture the rendered page as PDF
-        bytes = Buffer.from(await page.pdf({ format: 'A3', printBackground: true, landscape: true }));
+      // Step 5: Search for the PIN
+      const pinClean = cleanPIN(ctx.property.pin);
+      let searched = false;
+      const frames = page.frames();
+      for (const frame of [page.mainFrame(), ...frames]) {
+        const selectors = [
+          '.esri-search__input',
+          'input[placeholder*="Search"]',
+          'input[placeholder*="search"]',
+          'input[placeholder*="Find"]',
+          'input[aria-label*="Search"]',
+          'input[type="text"]',
+        ];
+        for (const sel of selectors) {
+          try {
+            const input = frame.locator(sel).first();
+            if ((await input.count()) > 0 && await input.isVisible({ timeout: 2_000 })) {
+              await input.click();
+              await input.fill(pinClean);
+              await page.waitForTimeout(1_000);
+              await page.keyboard.press('Enter');
+              searched = true;
+              break;
+            }
+          } catch { continue; }
+        }
+        if (searched) break;
       }
 
-      // Validate: a blank capture or county-outline-only PDF is typically < 80 KB.
-      // If too small, wait another 10s and re-capture once.
+      // Step 6: Wait for map to pan/zoom to parcel
+      await page.waitForTimeout(10_000);
+
+      // Step 7: Force zoom to level 17 so parcel fills the viewport
+      const zoomSet = await page.evaluate(() => {
+        try {
+          const m = (window as unknown as Record<string, unknown>).map as Record<string, unknown> | undefined;
+          if (m && typeof m['setZoom'] === 'function') {
+            (m['setZoom'] as (n: number) => void)(17);
+            return 'setZoom';
+          } else if (m && typeof m['setLevel'] === 'function') {
+            (m['setLevel'] as (n: number) => void)(17);
+            return 'setLevel';
+          }
+          return 'not-found';
+        } catch (e) {
+          return String(e);
+        }
+      });
+      ctx.onProgress?.({ fetcher: this.id, status: 'progress', message: `zoom: ${zoomSet}` });
+
+      // Step 8-9: Wait for tile repaint
+      await page.waitForTimeout(8_000);
+      await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
+      await page.waitForTimeout(5_000);
+
+      // Step 10: Screenshot (avoids the print-mode map shift problem)
+      let bytes: Buffer = Buffer.from(await page.screenshot({ type: 'png', fullPage: false }));
+
+      // Step 12: Validate size — retry if county outline only
       if (bytes.byteLength < 80_000) {
+        ctx.onProgress?.({ fetcher: this.id, status: 'progress', message: 'Map render too small, retrying…' });
         await page.waitForTimeout(10_000);
         await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {});
-        try {
-          const pdfLink = page.locator('#pdfLink').first();
-          if ((await pdfLink.count()) > 0) {
-            const [dl] = await Promise.all([
-              page.waitForEvent('download', { timeout: 30_000 }),
-              pdfLink.click({ timeout: 10_000 }),
-            ]);
-            bytes = await downloadToBuffer(dl);
-          } else {
-            bytes = Buffer.from(await page.pdf({ format: 'A3', printBackground: true, landscape: true }));
-          }
-        } catch {
-          bytes = Buffer.from(await page.pdf({ format: 'A3', printBackground: true, landscape: true }));
-        }
+        bytes = Buffer.from(await page.screenshot({ type: 'png', fullPage: false }));
+      }
+
+      // Step 11: Embed screenshot PNG into a landscape PDF via page.pdf()
+      // We create a temporary data-URL page so page.pdf() captures the image
+      // without switching to print mode on the live GIS map.
+      let pdfBytes: Buffer;
+      try {
+        const base64 = bytes.toString('base64');
+        const htmlPage = await browser.newPage();
+        await htmlPage.setContent(
+          `<html><body style="margin:0;padding:0;background:#000">` +
+          `<img src="data:image/png;base64,${base64}" style="width:100%;height:auto"/>` +
+          `</body></html>`,
+          { waitUntil: 'load' },
+        );
+        pdfBytes = Buffer.from(await htmlPage.pdf({ format: 'A3', landscape: true, printBackground: true }));
+        await htmlPage.close();
+      } catch {
+        // Ultimate fallback: PDF from the live map page
+        pdfBytes = Buffer.from(await page.pdf({ format: 'A3', landscape: true, printBackground: true }));
       }
 
       const filename = `gis-map-${ctx.property.gisPin}.pdf`;
@@ -162,20 +184,20 @@ export const gisMapFetcher: Fetcher = {
         label: 'GIS parcel map (PDF)',
         filename,
         contentType: 'application/pdf',
-        bytes,
-        sourceUrl: url,
+        bytes: pdfBytes,
+        sourceUrl: MAP_URL,
       });
 
       await mkdir(ctx.outDir, { recursive: true });
       const path = join(ctx.outDir, filename);
-      await writeFile(path, bytes);
+      await writeFile(path, pdfBytes);
 
       ctx.onProgress?.({ fetcher: this.id, status: 'completed', file: path });
       return {
         fetcher: this.id,
         status: 'completed',
         files: [{ path, label: 'GIS parcel map (PDF)', contentType: 'application/pdf' }],
-        data: { artifactId: artifact.id, artifactSha256: artifact.sha256 },
+        data: { artifactId: artifact.id, artifactSha256: artifact.sha256, zoomed: zoomSet, searched },
         durationMs: Date.now() - t0,
       };
     } catch (err) {
@@ -187,4 +209,3 @@ export const gisMapFetcher: Fetcher = {
     }
   },
 };
-

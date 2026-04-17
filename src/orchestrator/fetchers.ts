@@ -16,6 +16,8 @@ import { firmetteFetcher } from '../fetchers/firmette.js';
 import { buncombePermitsFetcher } from '../fetchers/buncombePermits.js';
 import { simplicityPropertyFetcher } from '../fetchers/simplicityProperty.js';
 import { ashevillePermitsFetcher } from '../fetchers/ashevillePermits.js';
+import { sewerMapFetcher } from '../fetchers/sewerMap.js';
+import { slopeFetcher } from '../fetchers/slope.js';
 
 export const ALL_FETCHERS: Fetcher[] = [
   // REST fetchers — fast, always run
@@ -31,6 +33,8 @@ export const ALL_FETCHERS: Fetcher[] = [
   // Browser fetchers — maps
   gisMapFetcher,
   firmetteFetcher,
+  sewerMapFetcher,
+  slopeFetcher,
   // Browser fetchers — permits
   buncombePermitsFetcher,
   simplicityPropertyFetcher,
