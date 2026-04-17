@@ -36,35 +36,84 @@ export const firmetteFetcher: Fetcher = {
       firmetteUrl = await findFirmPanel(ctx.property.centroid.lon, ctx.property.centroid.lat);
     }
 
+    // Path A: direct HTTP fetch — FEMA's downloadFirmette URL often serves the
+    // PDF bytes directly without needing a browser. Try this first; it's faster
+    // and more reliable than browser automation for a straight PDF download.
+    let bytes: Buffer | null = null;
+    if (firmetteUrl) {
+      ctx.onProgress?.({ fetcher: this.id, status: 'progress', message: `Downloading firmette…` });
+      try {
+        const resp = await fetch(firmetteUrl, {
+          signal: AbortSignal.timeout(45_000),
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Henry/2)' },
+        });
+        if (resp.ok) {
+          const ct = resp.headers.get('content-type') ?? '';
+          if (ct.includes('application/pdf')) {
+            bytes = Buffer.from(await resp.arrayBuffer());
+          }
+        }
+      } catch { /* fall through to browser */ }
+    }
+
+    if (bytes && bytes.byteLength > 10_000) {
+      // Got a valid PDF via direct fetch — skip browser entirely
+      const filename = `firmette-${ctx.property.gisPin}.pdf`;
+      const artifact = await ctx.run.recorder.putArtifact({
+        fetcherCallId: ctx.run.fetcherCallId,
+        label: 'FEMA FIRMette (PDF)',
+        filename,
+        contentType: 'application/pdf',
+        bytes,
+        sourceUrl: firmetteUrl ?? 'https://msc.fema.gov/portal/home',
+      });
+      await mkdir(ctx.outDir, { recursive: true });
+      const path = join(ctx.outDir, filename);
+      await writeFile(path, bytes);
+      ctx.onProgress?.({ fetcher: this.id, status: 'completed', file: path });
+      return {
+        fetcher: this.id,
+        status: 'completed',
+        files: [{ path, label: 'FEMA FIRMette (PDF)', contentType: 'application/pdf' }],
+        data: { firmPanel: firmetteUrl ? extractPanel(firmetteUrl) : null, artifactId: artifact.id, artifactSha256: artifact.sha256 },
+        durationMs: Date.now() - t0,
+      };
+    }
+
+    // Path B: browser-based download
+    bytes = null;
     const browser = await launchBrowser(ctx.signal);
     try {
       const context = await browser.newContext({ viewport: { width: 1400, height: 900 }, acceptDownloads: true });
       const page = await context.newPage();
 
       // Intercept inline PDF responses
-      let interceptedPDF: Buffer | null = null;
+      // Use a wrapper object so TypeScript doesn't narrow the type to `never`
+      // inside the async callback (it can't see that the closure mutates it).
+      const intercepted: { pdf: Buffer | null } = { pdf: null };
       page.on('response', async (resp) => {
         try {
           const ct = resp.headers()['content-type'] ?? '';
-          if (ct.includes('application/pdf') && !interceptedPDF) {
-            interceptedPDF = Buffer.from(await resp.body());
+          if (ct.includes('application/pdf') && !intercepted.pdf) {
+            intercepted.pdf = Buffer.from(await resp.body());
           }
         } catch { /* ignore */ }
       });
 
-      let bytes: Buffer | null = null;
-
-      // Path A: direct firmette URL from NFHL
-      if (firmetteUrl) {
-        ctx.onProgress?.({ fetcher: this.id, status: 'progress', message: `Downloading firmette…` });
+      // Path B1: navigate to firmette URL in browser — FEMA may serve it via
+      // an HTML wrapper with an embedded PDF or a download trigger.
+      if (firmetteUrl && !bytes) {
+        ctx.onProgress?.({ fetcher: this.id, status: 'progress', message: `Opening firmette in browser…` });
         const [download] = await Promise.all([
           page.waitForEvent('download', { timeout: 45_000 }).catch(() => null),
           page.goto(firmetteUrl, { waitUntil: 'domcontentloaded', timeout: 45_000 }).catch(() => {}),
         ]);
-        await page.waitForTimeout(3_000);
+        // Wait longer — FEMA's portal takes time to generate the PDF
+        await page.waitForTimeout(8_000);
+        await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {});
 
         if (download) bytes = await downloadToBuffer(download);
-        else if (interceptedPDF) bytes = interceptedPDF;
+        else if (intercepted.pdf && intercepted.pdf.byteLength > 10_000) bytes = intercepted.pdf;
         else {
           // Try embedded viewer src
           const embedSrc = await page.locator('embed[src], object[data], iframe[src]').first()
@@ -75,14 +124,15 @@ export const firmetteFetcher: Fetcher = {
               page.waitForEvent('download', { timeout: 30_000 }).catch(() => null),
               page.goto(embedUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {}),
             ]);
+            await page.waitForTimeout(5_000);
             if (dl2) bytes = await downloadToBuffer(dl2);
-            else if (interceptedPDF) bytes = interceptedPDF;
+            else if (intercepted.pdf && intercepted.pdf.byteLength > 10_000) bytes = intercepted.pdf;
           }
         }
       }
 
-      // Path B: FEMA MSC portal address search fallback
-      if (!bytes) {
+      // Path B2: FEMA MSC portal address search fallback
+      if (!bytes || bytes.byteLength < 10_000) {
         const address = ctx.property.address ?? '';
         ctx.onProgress?.({ fetcher: this.id, status: 'progress', message: 'Searching FEMA portal…' });
         await page.goto('https://msc.fema.gov/portal/home', { waitUntil: 'load', timeout: 60_000 }).catch(() => {});
@@ -101,10 +151,11 @@ export const firmetteFetcher: Fetcher = {
           if ((await searchBtn.count()) > 0) await searchBtn.click();
           else await page.keyboard.press('Enter');
 
-          await page.waitForTimeout(10_000);
+          // FEMA portal is a heavy SPA — wait for the map to load results
+          await page.waitForTimeout(15_000);
           await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
 
-          // Look for FIRMette link
+          // Look for FIRMette link or button
           const firmetteSelectors = [
             'a[href*="downloadFirmette"]',
             'a:has-text("FIRMette")',
@@ -114,30 +165,40 @@ export const firmetteFetcher: Fetcher = {
           ];
           for (const fsel of firmetteSelectors) {
             const link = page.locator(fsel).first();
-            if (!(await link.waitFor({ state: 'visible', timeout: 5_000 }).then(() => true).catch(() => false))) continue;
+            if (!(await link.waitFor({ state: 'visible', timeout: 8_000 }).then(() => true).catch(() => false))) continue;
 
             const href = await link.getAttribute('href').catch(() => null);
             if (href) {
               const fullUrl = href.startsWith('http') ? href : `https://msc.fema.gov${href}`;
+              // Try direct fetch of found href first
+              try {
+                const r = await fetch(fullUrl, { signal: AbortSignal.timeout(30_000), headers: { 'User-Agent': 'Mozilla/5.0' } });
+                if (r.ok && (r.headers.get('content-type') ?? '').includes('application/pdf')) {
+                  const candidate = Buffer.from(await r.arrayBuffer());
+                  if (candidate.byteLength > 10_000) { bytes = candidate; break; }
+                }
+              } catch { /* fall through */ }
+
               const [dl] = await Promise.all([
                 page.waitForEvent('download', { timeout: 45_000 }).catch(() => null),
                 page.goto(fullUrl, { waitUntil: 'domcontentloaded', timeout: 45_000 }).catch(() => {}),
               ]);
-              await page.waitForTimeout(3_000);
-              if (dl) bytes = await downloadToBuffer(dl);
-              else if (interceptedPDF) bytes = interceptedPDF;
-              break;
+              await page.waitForTimeout(5_000);
+              if (dl) { bytes = await downloadToBuffer(dl); break; }
+              if (intercepted.pdf && intercepted.pdf.byteLength > 10_000) { bytes = intercepted.pdf; break; }
             }
 
-            // It's a button — click and check for download/interception
+            // It's a button — click and wait for download/interception
             await link.click().catch(() => {});
-            await page.waitForTimeout(5_000);
-            if (interceptedPDF) { bytes = interceptedPDF; break; }
+            await page.waitForTimeout(8_000);
+            if (intercepted.pdf && intercepted.pdf.byteLength > 10_000) { bytes = intercepted.pdf; break; }
           }
         }
 
-        // Last resort: capture portal page as PDF
-        if (!bytes) {
+        // Last resort: capture portal page as PDF — only if we have nothing else.
+        // Note: this will capture whatever is currently rendered. If the map has
+        // loaded with the property in view this is usable; if not it's a blank portal.
+        if (!bytes || bytes.byteLength < 10_000) {
           bytes = Buffer.from(await page.pdf({
             format: 'Letter', printBackground: true,
             margin: { top: '0.25in', bottom: '0.25in', left: '0.25in', right: '0.25in' },

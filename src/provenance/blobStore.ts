@@ -1,10 +1,10 @@
 /**
  * VercelBlobArtifactStore — @vercel/blob-backed artifact storage.
  *
- * Artifacts are keyed by `${runId}/${filename}`. The returned storageUri
- * is the Blob URL, which is publicly accessible by default — callers who
- * want access control should switch `access: 'private'` once Vercel Blob
- * supports it for their plan, and use `presign` to mint short-lived URLs.
+ * Artifacts are keyed by `${runId}/${filename}`. Blobs are stored with
+ * `access: 'private'` (required by the store configuration). Downloads use
+ * `Authorization: Bearer <token>` directly — the same method @vercel/blob's
+ * own `get()` uses internally.
  *
  * The store is transport-agnostic about the Vercel environment: in
  * production it reads `BLOB_READ_WRITE_TOKEN` from the env; in tests you
@@ -49,15 +49,10 @@ export class VercelBlobArtifactStore implements ArtifactStore {
   }
 
   async get(storageUri: string): Promise<Buffer> {
-    // Private blobs require a presigned downloadUrl — fetching the raw blob
-    // URL directly returns 401. Use head() to get a short-lived download URL.
-    let url = storageUri;
-    if (this.token) {
-      const { head } = await import('@vercel/blob');
-      const info = await head(storageUri, { token: this.token });
-      url = info.downloadUrl;
-    }
-    const res = await fetch(url);
+    // Private blobs require Bearer token authentication.
+    const headers: Record<string, string> = {};
+    if (this.token) headers['authorization'] = `Bearer ${this.token}`;
+    const res = await fetch(storageUri, { headers });
     if (!res.ok) {
       throw new Error(`blob fetch failed: HTTP ${res.status} for ${storageUri}`);
     }
@@ -67,7 +62,6 @@ export class VercelBlobArtifactStore implements ArtifactStore {
   async presign(storageUri: string): Promise<string> {
     const { head } = await import('@vercel/blob');
     const info = await head(storageUri, { token: this.token });
-    // downloadUrl is a time-limited presigned URL for private blobs
     return info.downloadUrl;
   }
 }
