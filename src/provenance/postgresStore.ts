@@ -252,7 +252,7 @@ export class PostgresProvenanceStore implements ProvenanceStore {
 
     const [fcRes, artRes] = await Promise.all([
       this.pool.query(
-        `SELECT fetcher_id, status FROM fetcher_calls WHERE run_id = $1`,
+        `SELECT fetcher_id, status, data FROM fetcher_calls WHERE run_id = $1`,
         [runId],
       ),
       this.pool.query(
@@ -262,7 +262,11 @@ export class PostgresProvenanceStore implements ProvenanceStore {
     ]);
 
     const fetcherStatuses: Record<string, string> = {};
-    for (const fc of fcRes.rows) fetcherStatuses[fc.fetcher_id] = fc.status;
+    const fetcherData: Record<string, Record<string, unknown>> = {};
+    for (const fc of fcRes.rows) {
+      fetcherStatuses[fc.fetcher_id] = fc.status;
+      if (fc.data) fetcherData[fc.fetcher_id] = fc.data as Record<string, unknown>;
+    }
 
     return {
       runId: String(row.id),
@@ -282,6 +286,7 @@ export class PostgresProvenanceStore implements ProvenanceStore {
         bytes: Number(a.bytes),
       })),
       fetcherStatuses,
+      fetcherData,
     };
   }
 

@@ -60,6 +60,8 @@ export interface WebRunStatus {
     bytes: number;
   }>;
   fetcherStatuses: Record<string, string>;
+  /** Structured data from each completed fetcher (fetcherId → data object) */
+  fetcherData: Record<string, Record<string, unknown>>;
 }
 
 /** One row in the public history list. */

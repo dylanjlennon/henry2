@@ -6,12 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --bg: #f8f9fa;
+      --bg: #f5f6f8;
       --surface: #ffffff;
       --border: #e2e8f0;
       --text: #1a202c;
@@ -19,613 +18,157 @@
       --accent: #2563eb;
       --accent-hover: #1d4ed8;
       --success: #059669;
-      --warn: #d97706;
       --error: #dc2626;
-      --radius: 10px;
-      --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
-      --shadow-lg: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.1);
+      --warn: #d97706;
+      --radius: 12px;
+      --shadow: 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.05);
+      --shadow-lg: 0 4px 16px rgba(0,0,0,.08);
     }
+    body { font-family: 'Inter', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; }
 
-    body {
-      font-family: 'Inter', -apple-system, system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      line-height: 1.5;
-    }
+    /* ── HEADER ── */
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 28px; height: 56px; display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-weight: 700; font-size: 18px; letter-spacing: -.4px; color: var(--text); text-decoration: none; }
+    .logo em { color: var(--accent); font-style: normal; }
+    .tagline { font-size: 12px; color: var(--muted); font-weight: 500; letter-spacing: .2px; }
 
-    header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0 24px;
-      height: 56px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .logo { font-weight: 700; font-size: 18px; letter-spacing: -.3px; }
-    .logo span { color: var(--accent); }
-    .badge {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: .4px;
-      text-transform: uppercase;
-      background: #eff6ff;
-      color: var(--accent);
-      padding: 3px 10px;
-      border-radius: 999px;
-    }
+    /* ── HERO ── */
+    .hero { max-width: 600px; margin: 0 auto; padding: 72px 24px 40px; text-align: center; }
+    .hero h1 { font-size: 32px; font-weight: 700; letter-spacing: -.6px; line-height: 1.2; margin-bottom: 12px; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); font-size: 15px; max-width: 420px; margin: 0 auto 36px; }
 
-    main { max-width: 800px; margin: 0 auto; padding: 40px 24px 80px; }
-
-    .hero { text-align: center; margin-bottom: 40px; }
-    .hero h1 { font-size: 28px; font-weight: 700; letter-spacing: -.5px; margin-bottom: 10px; }
-    .hero p { color: var(--muted); font-size: 15px; max-width: 480px; margin: 0 auto; }
-
-    .search-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 28px;
-      box-shadow: var(--shadow);
-      margin-bottom: 32px;
-    }
-
-    .input-row { display: flex; gap: 10px; }
-    #address-input {
-      flex: 1;
-      height: 48px;
-      padding: 0 16px;
-      border: 1.5px solid var(--border);
-      border-radius: 8px;
-      font-size: 15px;
-      font-family: inherit;
-      color: var(--text);
-      outline: none;
-      transition: border-color .15s;
-    }
-    #address-input:focus { border-color: var(--accent); }
+    /* ── SEARCH ── */
+    .search-wrap { max-width: 600px; margin: 0 auto; padding: 0 24px; }
+    .search-box { background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); overflow: visible; padding: 6px 6px 6px 18px; display: flex; align-items: center; gap: 8px; transition: border-color .15s, box-shadow .15s; }
+    .search-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.1), var(--shadow-lg); }
+    #address-input { flex: 1; border: none; outline: none; font-size: 16px; font-family: inherit; color: var(--text); background: transparent; padding: 8px 0; min-width: 0; }
     #address-input::placeholder { color: #a0aec0; }
-
-    #search-btn {
-      height: 48px;
-      padding: 0 24px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 15px;
-      font-weight: 600;
-      font-family: inherit;
-      cursor: pointer;
-      transition: background .15s, opacity .15s;
-      white-space: nowrap;
-    }
+    #search-btn { flex-shrink: 0; height: 44px; padding: 0 22px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer; transition: background .15s, opacity .15s; white-space: nowrap; }
     #search-btn:hover { background: var(--accent-hover); }
-    #search-btn:disabled { opacity: .6; cursor: not-allowed; }
+    #search-btn:disabled { opacity: .55; cursor: not-allowed; }
+    .search-hint { font-size: 12px; color: var(--muted); margin-top: 10px; text-align: center; }
 
-    .hint { font-size: 12px; color: var(--muted); margin-top: 10px; }
-    .hint strong { color: var(--text); }
+    #error-msg { display: none; background: #fef2f2; border: 1px solid #fecaca; color: var(--error); border-radius: 8px; padding: 11px 16px; font-size: 14px; margin-top: 12px; }
 
-    #error-msg {
-      display: none;
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      color: var(--error);
-      border-radius: 8px;
-      padding: 12px 16px;
-      font-size: 14px;
-      margin-top: 14px;
-    }
+    /* ── BATCH SECTION ── */
+    .batch-section { max-width: 600px; margin: 28px auto 0; padding: 0 24px; }
+    .batch-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; width: fit-content; }
+    .batch-toggle:hover { color: var(--text); }
+    .batch-toggle svg { transition: transform .2s; }
+    .batch-toggle.open svg { transform: rotate(90deg); }
+    .batch-body { display: none; margin-top: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+    .batch-body.open { display: block; }
+    .batch-body label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; display: block; margin-bottom: 8px; }
+    #batch-input { width: 100%; min-height: 100px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 13px; font-family: 'Inter', monospace; color: var(--text); padding: 10px 12px; resize: vertical; outline: none; transition: border-color .15s; }
+    #batch-input:focus { border-color: var(--accent); }
+    #batch-btn { margin-top: 10px; height: 38px; padding: 0 18px; background: var(--accent); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; transition: background .15s; }
+    #batch-btn:hover { background: var(--accent-hover); }
+    #batch-status { margin-top: 10px; font-size: 13px; color: var(--muted); }
 
-    /* ── Property card ── */
-    #property-card {
-      display: none;
-      background: #f0fdf4;
-      border: 1px solid #bbf7d0;
-      border-radius: 8px;
-      padding: 16px 20px;
-      margin-top: 20px;
-    }
-    .prop-pin { font-weight: 700; font-size: 16px; margin-bottom: 6px; }
-    .prop-meta { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 13px; color: #374151; }
-    .prop-meta span { display: flex; align-items: center; gap: 4px; }
+    /* ── HISTORY ── */
+    .history-section { max-width: 900px; margin: 48px auto 80px; padding: 0 24px; }
+    .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .section-title { font-weight: 600; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .history-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+    .history-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; cursor: pointer; transition: box-shadow .15s, border-color .15s; text-decoration: none; display: block; }
+    .history-card:hover { box-shadow: var(--shadow-lg); border-color: #c7d7f8; }
+    .hc-address { font-weight: 600; font-size: 14px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+    .hc-pin { font-size: 12px; color: var(--muted); font-family: 'SF Mono', 'Fira Code', monospace; margin-bottom: 10px; }
+    .hc-meta { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); }
+    .hc-status { display: flex; align-items: center; gap: 5px; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+    .dot.failed { background: var(--error); }
+    .dot.running { background: var(--warn); animation: pulse 1.4s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .hc-docs { font-weight: 500; color: var(--text); }
+    .empty-state { text-align: center; padding: 40px 0; color: var(--muted); font-size: 14px; grid-column: 1/-1; }
 
-    /* ── Progress section ── */
-    #progress-section { display: none; margin-bottom: 28px; }
-
-    .section-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 14px;
-    }
-    .section-title { font-weight: 600; font-size: 15px; }
-    #elapsed { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-
-    .fetcher-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-      gap: 8px;
-    }
-    .fetcher-pill {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 8px 12px;
-      font-size: 13px;
-      transition: border-color .2s, background .2s;
-    }
-    .fetcher-pill.completed { border-color: #bbf7d0; background: #f0fdf4; }
-    .fetcher-pill.failed    { border-color: #fecaca; background: #fef2f2; }
-    .fetcher-pill.skipped   { border-color: var(--border); background: #f9fafb; color: var(--muted); }
-    .fetcher-pill .icon { font-size: 14px; flex-shrink: 0; }
-    .fetcher-pill .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-    /* ── Results section ── */
-    #results-section { display: none; margin-bottom: 28px; }
-
-    .pdf-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-      gap: 12px;
-    }
-    .pdf-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 18px;
-      box-shadow: var(--shadow);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      animation: fadeIn .3s ease;
-    }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-
-    .pdf-icon { font-size: 28px; }
-    .pdf-label { font-weight: 600; font-size: 14px; line-height: 1.3; }
-    .pdf-meta { font-size: 12px; color: var(--muted); }
-    .pdf-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      height: 36px;
-      background: var(--accent);
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 600;
-      font-family: inherit;
-      cursor: pointer;
-      text-decoration: none;
-      transition: background .15s;
-      margin-top: auto;
-    }
-    .pdf-btn:hover { background: var(--accent-hover); }
-
-    /* ── Summary bar ── */
-    #summary-bar {
-      display: none;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 14px 20px;
-      font-size: 14px;
-      margin-bottom: 28px;
-      display: none;
-      align-items: center;
-      gap: 10px;
-    }
-    #summary-bar.show { display: flex; }
-    #summary-bar.ok  { border-color: #bbf7d0; background: #f0fdf4; }
-    #summary-bar.warn { border-color: #fde68a; background: #fffbeb; }
-
-    /* ── History ── */
-    #history-section { margin-top: 48px; }
-    .history-table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    thead th {
-      text-align: left;
-      padding: 8px 12px;
-      font-weight: 600;
-      color: var(--muted);
-      border-bottom: 1px solid var(--border);
-      white-space: nowrap;
-    }
-    tbody tr { border-bottom: 1px solid #f1f5f9; cursor: pointer; transition: background .1s; }
-    tbody tr:hover { background: #f8fafc; }
-    tbody td { padding: 10px 12px; }
-    .status-dot {
-      display: inline-block;
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      margin-right: 6px;
-      vertical-align: middle;
-    }
-    .dot-completed, .dot-partial { background: var(--success); }
-    .dot-running { background: var(--warn); }
-    .dot-failed { background: var(--error); }
-    .address-cell { font-weight: 500; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .pin-cell { color: var(--muted); font-size: 12px; font-family: monospace; }
-
-    .empty-state { text-align: center; padding: 40px 0; color: var(--muted); font-size: 14px; }
-
-    /* Google autocomplete dropdown fix */
-    .pac-container { z-index: 9999; font-family: 'Inter', sans-serif; font-size: 14px; }
+    .pac-container { z-index: 9999; font-family: 'Inter', sans-serif; font-size: 14px; border-radius: 8px; }
   </style>
 </head>
 <body>
 
 <header>
-  <div class="logo">Henry<span>.</span></div>
-  <div class="badge">Buncombe County, NC</div>
+  <a class="logo" href="/app.html">Henry<em>.</em></a>
+  <span class="tagline">Buncombe County, NC</span>
 </header>
 
-<main>
-  <div class="hero">
-    <h1>Property Research in 2.5 Minutes</h1>
-    <p>Type any Buncombe County address. Henry pulls every public record — deed, tax bill, flood map, permits — and delivers them as downloadable PDFs.</p>
+<div class="hero">
+  <h1>Property research,<br><span>done in minutes.</span></h1>
+  <p>Type any Buncombe County address or PIN. Henry pulls every public record and delivers a complete property intelligence report.</p>
+</div>
+
+<div class="search-wrap">
+  <div class="search-box">
+    <input id="address-input" type="text" placeholder="546 Old Haw Creek Rd, Asheville, NC" autocomplete="off" />
+    <button id="search-btn">Research →</button>
   </div>
+  <p class="search-hint">Street addresses and 15-digit PINs accepted.</p>
+  <div id="error-msg"></div>
+</div>
 
-  <div class="search-card">
-    <div class="input-row">
-      <input
-        id="address-input"
-        type="text"
-        placeholder="546 Old Haw Creek Rd, Asheville, NC"
-        autocomplete="off"
-      />
-      <button id="search-btn">Research</button>
-    </div>
-    <p class="hint">Buncombe County addresses only. Try a street address or a 15-digit PIN.</p>
-    <div id="error-msg"></div>
-
-    <div id="property-card">
-      <div class="prop-pin" id="prop-pin"></div>
-      <div class="prop-meta" id="prop-meta"></div>
-    </div>
+<div class="batch-section">
+  <div class="batch-toggle" id="batch-toggle">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M4.5 2.5L8 6L4.5 9.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Batch research multiple addresses
   </div>
-
-  <!-- Progress -->
-  <div id="progress-section">
-    <div class="section-header">
-      <span class="section-title">Fetching records…</span>
-      <span id="elapsed">0s</span>
-    </div>
-    <div class="fetcher-grid" id="fetcher-grid"></div>
+  <div class="batch-body" id="batch-body">
+    <label>One address per line</label>
+    <textarea id="batch-input" placeholder="14 Marne Road&#10;22 Kenilwood Place&#10;351 Windsor Road&#10;193 Pennsylvania Avenue&#10;21 Kylie Grace Lane&#10;1 Sunset Hills Drive"></textarea>
+    <button id="batch-btn">Research all →</button>
+    <div id="batch-status"></div>
   </div>
+</div>
 
-  <!-- Summary bar -->
-  <div id="summary-bar"></div>
-
-  <!-- PDF results -->
-  <div id="results-section">
-    <div class="section-header">
-      <span class="section-title" id="results-title">Documents</span>
-    </div>
-    <div class="pdf-grid" id="pdf-grid"></div>
+<div class="history-section">
+  <div class="section-header">
+    <span class="section-title">Recent Searches</span>
   </div>
-
-  <!-- History -->
-  <div id="history-section">
-    <div class="section-header">
-      <span class="section-title">Recent Searches</span>
-    </div>
-    <div class="history-table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Address</th>
-            <th>PIN</th>
-            <th>Status</th>
-            <th>Docs</th>
-            <th>Time</th>
-            <th>Date</th>
-          </tr>
-        </thead>
-        <tbody id="history-body">
-          <tr><td colspan="6" class="empty-state">Loading history…</td></tr>
-        </tbody>
-      </table>
-    </div>
+  <div class="history-grid" id="history-grid">
+    <div class="empty-state">Loading…</div>
   </div>
-</main>
+</div>
 
-<!-- Google Places API — key loaded from /api/web/config at runtime -->
-<script>
-  window.__HENRY_PLACES_KEY__ = '';
-</script>
 <script>
 (function () {
   'use strict';
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let currentRunId = null;
-  let pollInterval = null;
-  let elapsedInterval = null;
-  let startTime = null;
-  let knownArtifactIds = new Set();
+  const addressInput = document.getElementById('address-input');
+  const searchBtn    = document.getElementById('search-btn');
+  const errorMsg     = document.getElementById('error-msg');
+  const historyGrid  = document.getElementById('history-grid');
+  const batchToggle  = document.getElementById('batch-toggle');
+  const batchBody    = document.getElementById('batch-body');
+  const batchInput   = document.getElementById('batch-input');
+  const batchBtn     = document.getElementById('batch-btn');
+  const batchStatus  = document.getElementById('batch-status');
 
-  const ALL_FETCHER_IDS = [
-    'parcel-json', 'fema-flood', 'septic',
-    'property-card', 'tax-bill', 'deed', 'plat',
-    'gis-map', 'firmette', 'buncombe-permits',
-    'simplicity-property', 'asheville-permits',
-  ];
-
-  // ── DOM refs ───────────────────────────────────────────────────────────────
-  const addressInput  = document.getElementById('address-input');
-  const searchBtn     = document.getElementById('search-btn');
-  const errorMsg      = document.getElementById('error-msg');
-  const propertyCard  = document.getElementById('property-card');
-  const propPin       = document.getElementById('prop-pin');
-  const propMeta      = document.getElementById('prop-meta');
-  const progressSec   = document.getElementById('progress-section');
-  const fetcherGrid   = document.getElementById('fetcher-grid');
-  const elapsedEl     = document.getElementById('elapsed');
-  const summaryBar    = document.getElementById('summary-bar');
-  const resultsSec    = document.getElementById('results-section');
-  const resultsTitle  = document.getElementById('results-title');
-  const pdfGrid       = document.getElementById('pdf-grid');
-  const historyBody   = document.getElementById('history-body');
-
-  // ── Search ─────────────────────────────────────────────────────────────────
+  // ── Search ──────────────────────────────────────────────────────────────────
   searchBtn.addEventListener('click', startSearch);
   addressInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') startSearch(); });
 
   async function startSearch() {
     const address = addressInput.value.trim();
-    if (!address) { showError('Please enter an address.'); return; }
-
-    reset();
-    setLoading(true);
-
-    let data;
+    if (!address) { showError('Please enter an address or PIN.'); return; }
+    errorMsg.style.display = 'none';
+    searchBtn.disabled = true;
+    searchBtn.textContent = 'Resolving…';
     try {
       const resp = await fetch('/api/web/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address }),
       });
-      data = await resp.json();
-      if (!resp.ok) { showError(data.error || 'Something went wrong.'); setLoading(false); return; }
-    } catch {
-      showError('Network error — please try again.'); setLoading(false); return;
-    }
-
-    // Show property card
-    currentRunId = data.runId;
-    propPin.textContent = data.pin;
-    const meta = [];
-    if (data.address) meta.push(`📍 ${data.address}`);
-    if (data.ownerName) meta.push(`👤 ${data.ownerName}`);
-    meta.push(`✓ ${(data.confidence * 100).toFixed(0)}% match`);
-    propMeta.innerHTML = meta.map((m) => `<span>${m}</span>`).join('');
-    propertyCard.style.display = 'block';
-
-    // Init fetcher grid
-    initFetcherGrid();
-    progressSec.style.display = 'block';
-
-    // Start elapsed timer
-    startTime = Date.now();
-    elapsedInterval = setInterval(() => {
-      const s = Math.floor((Date.now() - startTime) / 1000);
-      elapsedEl.textContent = s >= 60 ? `${Math.floor(s/60)}m ${s%60}s` : `${s}s`;
-    }, 1000);
-
-    // Show results section immediately (cards appear as they arrive)
-    resultsSec.style.display = 'block';
-
-    setLoading(false);
-    pollForStatus();
-  }
-
-  function initFetcherGrid() {
-    fetcherGrid.innerHTML = ALL_FETCHER_IDS.map((id) =>
-      `<div class="fetcher-pill" id="fp-${id}">
-        <span class="icon">⏳</span>
-        <span class="name">${id}</span>
-      </div>`
-    ).join('');
-  }
-
-  // ── Polling ────────────────────────────────────────────────────────────────
-  function pollForStatus() {
-    pollInterval = setInterval(async () => {
-      if (!currentRunId) return;
-      try {
-        const resp = await fetch(`/api/web/status/${currentRunId}`);
-        if (!resp.ok) return;
-        const data = await resp.json();
-        applyStatus(data);
-        if (data.status !== 'running') finishPolling(data);
-      } catch { /* ignore transient errors */ }
-    }, 2000);
-  }
-
-  function applyStatus(data) {
-    // Update fetcher pills
-    for (const [fetcherId, status] of Object.entries(data.fetcherStatuses || {})) {
-      const pill = document.getElementById(`fp-${fetcherId}`);
-      if (!pill) continue;
-      pill.className = `fetcher-pill ${status}`;
-      const icon = pill.querySelector('.icon');
-      if (status === 'completed') icon.textContent = '✅';
-      else if (status === 'failed') icon.textContent = '❌';
-      else if (status === 'skipped') icon.textContent = '⏩';
-      else if (status === 'timeout') icon.textContent = '⏱';
-      else icon.textContent = '⏳';
-    }
-
-    // Add new artifact cards
-    for (const artifact of (data.artifacts || [])) {
-      if (knownArtifactIds.has(artifact.id)) continue;
-      knownArtifactIds.add(artifact.id);
-      addPdfCard(artifact);
-    }
-
-    const count = (data.artifacts || []).length;
-    resultsTitle.textContent = count > 0 ? `Documents (${count})` : 'Documents';
-  }
-
-  function finishPolling(data) {
-    clearInterval(pollInterval);
-    clearInterval(elapsedInterval);
-    pollInterval = null;
-
-    const secs = data.durationMs ? (data.durationMs / 1000).toFixed(1) : '?';
-    const total = data.fetchersPlanned || 12;
-    const completed = data.fetchersCompleted || 0;
-    const failed = data.fetchersFailed || 0;
-    const docs = (data.artifacts || []).length;
-
-    progressSec.querySelector('.section-title').textContent = 'Fetchers';
-
-    const isOk = data.status === 'completed' || data.status === 'partial';
-    summaryBar.className = `show ${isOk ? (failed > 0 ? 'warn' : 'ok') : 'warn'}`;
-    summaryBar.innerHTML = isOk
-      ? `${failed === 0 ? '✅' : '⚠️'} Done — ${completed}/${total} fetchers, ${docs} documents, ${secs}s`
-      : `❌ Run failed — ${completed}/${total} fetchers completed`;
-    summaryBar.style.display = 'flex';
-
-    // Refresh history
-    loadHistory();
-  }
-
-  // ── PDF cards ──────────────────────────────────────────────────────────────
-  function addPdfCard(artifact) {
-    const isDoc = artifact.contentType !== 'application/json';
-    if (!isDoc) return; // skip JSON artifacts
-
-    const kb = artifact.bytes ? (artifact.bytes / 1024).toFixed(0) + ' KB' : '';
-    const icon = contentIcon(artifact.contentType);
-    const downloadUrl = `/api/artifact/${artifact.id}`;
-
-    const card = document.createElement('div');
-    card.className = 'pdf-card';
-    card.innerHTML = `
-      <div class="pdf-icon">${icon}</div>
-      <div class="pdf-label">${escHtml(artifact.label)}</div>
-      ${kb ? `<div class="pdf-meta">${kb}</div>` : ''}
-      <a class="pdf-btn" href="${downloadUrl}" download target="_blank">
-        ⬇ Download
-      </a>`;
-    pdfGrid.appendChild(card);
-  }
-
-  function contentIcon(ct) {
-    if (ct === 'application/pdf') return '📄';
-    if (ct.startsWith('image/')) return '🖼';
-    if (ct === 'text/csv') return '📊';
-    return '📎';
-  }
-
-  // ── History ────────────────────────────────────────────────────────────────
-  async function loadHistory() {
-    try {
-      const resp = await fetch('/api/web/history?limit=20');
-      if (!resp.ok) return;
-      const { runs } = await resp.json();
-      renderHistory(runs);
-    } catch { /* silent */ }
-  }
-
-  function renderHistory(runs) {
-    if (!runs || runs.length === 0) {
-      historyBody.innerHTML = '<tr><td colspan="6" class="empty-state">No searches yet — be the first!</td></tr>';
-      return;
-    }
-    historyBody.innerHTML = runs.map((r) => {
-      const statusClass = r.status === 'running' ? 'running' : r.status === 'failed' ? 'failed' : 'completed';
-      const dur = r.durationMs ? (r.durationMs / 1000).toFixed(0) + 's' : '—';
-      const date = new Date(r.startedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      return `<tr onclick="window.__henry_load_run__('${escHtml(r.runId)}')">
-        <td class="address-cell">${escHtml(r.address || '—')}</td>
-        <td class="pin-cell">${escHtml(r.pin)}</td>
-        <td><span class="status-dot dot-${statusClass}"></span>${r.status}</td>
-        <td>${r.artifactsProduced}</td>
-        <td>${dur}</td>
-        <td>${date}</td>
-      </tr>`;
-    }).join('');
-  }
-
-  // Click a history row to re-load that run's artifacts
-  window.__henry_load_run__ = async function (runId) {
-    try {
-      const resp = await fetch(`/api/web/status/${runId}`);
-      if (!resp.ok) return;
       const data = await resp.json();
-
-      reset();
-      currentRunId = runId;
-
-      // Show property card
-      propPin.textContent = data.pin;
-      const meta = [];
-      if (data.address) meta.push(`📍 ${data.address}`);
-      if (data.ownerName) meta.push(`👤 ${data.ownerName}`);
-      propMeta.innerHTML = meta.map((m) => `<span>${m}</span>`).join('');
-      propertyCard.style.display = 'block';
-
-      // Show fetcher grid (frozen, no polling)
-      initFetcherGrid();
-      progressSec.style.display = 'block';
-      progressSec.querySelector('.section-title').textContent = 'Fetchers';
-
-      // Show artifacts
-      resultsSec.style.display = 'block';
-      applyStatus(data);
-
-      const docs = (data.artifacts || []).filter((a) => a.contentType !== 'application/json').length;
-      resultsTitle.textContent = docs > 0 ? `Documents (${docs})` : 'Documents';
-
-      // Summary
-      if (data.status !== 'running') {
-        const secs = data.durationMs ? (data.durationMs / 1000).toFixed(1) : '?';
-        const failed = data.fetchersFailed || 0;
-        summaryBar.className = `show ${failed === 0 ? 'ok' : 'warn'}`;
-        summaryBar.innerHTML = `${failed === 0 ? '✅' : '⚠️'} ${data.fetchersCompleted}/${data.fetchersPlanned} fetchers, ${docs} documents, ${secs}s`;
-        summaryBar.style.display = 'flex';
-      }
-
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch { /* silent */ }
-  };
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  function reset() {
-    clearInterval(pollInterval);
-    clearInterval(elapsedInterval);
-    pollInterval = null;
-    elapsedInterval = null;
-    currentRunId = null;
-    startTime = null;
-    knownArtifactIds = new Set();
-
-    errorMsg.style.display = 'none';
-    propertyCard.style.display = 'none';
-    progressSec.style.display = 'none';
-    resultsSec.style.display = 'none';
-    summaryBar.style.display = 'none';
-    summaryBar.className = '';
-    pdfGrid.innerHTML = '';
-    fetcherGrid.innerHTML = '';
-    elapsedEl.textContent = '0s';
-    progressSec.querySelector('.section-title').textContent = 'Fetching records…';
-    resultsTitle.textContent = 'Documents';
-  }
-
-  function setLoading(on) {
-    searchBtn.disabled = on;
-    searchBtn.textContent = on ? 'Searching…' : 'Research';
+      if (!resp.ok) { showError(data.error || 'Could not resolve address.'); return; }
+      window.location.href = `/report.html?run=${encodeURIComponent(data.runId)}`;
+    } catch {
+      showError('Network error — please try again.');
+    } finally {
+      searchBtn.disabled = false;
+      searchBtn.textContent = 'Research →';
+    }
   }
 
   function showError(msg) {
@@ -633,52 +176,134 @@
     errorMsg.style.display = 'block';
   }
 
-  function escHtml(s) {
+  // ── Batch ──────────────────────────────────────────────────────────────────
+  batchToggle.addEventListener('click', () => {
+    batchToggle.classList.toggle('open');
+    batchBody.classList.toggle('open');
+  });
+
+  batchBtn.addEventListener('click', async () => {
+    const lines = batchInput.value.split('\n').map(s => s.trim()).filter(Boolean);
+    if (!lines.length) return;
+    batchBtn.disabled = true;
+    batchStatus.textContent = `Queuing ${lines.length} address(es)…`;
+
+    let done = 0;
+    for (const address of lines) {
+      try {
+        const resp = await fetch('/api/web/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address }),
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+          done++;
+          batchStatus.textContent = `Queued ${done}/${lines.length}: ${data.address ?? address}`;
+        } else {
+          batchStatus.textContent = `⚠ ${address}: ${data.error}`;
+        }
+      } catch {
+        batchStatus.textContent = `⚠ Network error on: ${address}`;
+      }
+      // Throttle to avoid rate limit
+      if (done < lines.length) await new Promise(r => setTimeout(r, 1500));
+    }
+    batchStatus.textContent = `✓ Queued ${done} searches. Results will appear below.`;
+    batchBtn.disabled = false;
+    setTimeout(loadHistory, 2000);
+  });
+
+  // ── History ────────────────────────────────────────────────────────────────
+  async function loadHistory() {
+    try {
+      const resp = await fetch('/api/web/history?limit=24');
+      if (!resp.ok) return;
+      const { runs } = await resp.json();
+      renderHistory(runs);
+    } catch { /* silent */ }
+  }
+
+  function renderHistory(runs) {
+    if (!runs || !runs.length) {
+      historyGrid.innerHTML = '<div class="empty-state">No searches yet — try an address above.</div>';
+      return;
+    }
+    historyGrid.innerHTML = runs.map(r => {
+      const isRunning = r.status === 'running';
+      const isFailed = r.status === 'failed';
+      const dotClass = isRunning ? 'dot running' : isFailed ? 'dot failed' : 'dot';
+      const statusText = isRunning ? 'Researching…' : isFailed ? 'Failed' : 'Complete';
+      const docs = r.artifactsProduced ? `${r.artifactsProduced} docs` : '';
+      const when = formatWhen(r.startedAt);
+      return `<a class="history-card" href="/report.html?run=${esc(r.runId)}">
+        <div class="hc-address">${esc(r.address || r.pin)}</div>
+        <div class="hc-pin">${esc(r.pin)}</div>
+        <div class="hc-meta">
+          <span class="hc-status"><span class="${dotClass}"></span>${statusText}</span>
+          <span>${docs ? `<strong class="hc-docs">${esc(docs)}</strong> · ` : ''}${esc(when)}</span>
+        </div>
+      </a>`;
+    }).join('');
+  }
+
+  function formatWhen(iso) {
+    try {
+      const d = new Date(iso);
+      const now = new Date();
+      const diffMs = now - d;
+      const diffMin = Math.floor(diffMs / 60000);
+      if (diffMin < 1) return 'just now';
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffH = Math.floor(diffMin / 60);
+      if (diffH < 24) return `${diffH}h ago`;
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } catch { return ''; }
+  }
+
+  function esc(s) {
     if (s == null) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  // ── Google Places Autocomplete ─────────────────────────────────────────────
+  // ── Google Places ──────────────────────────────────────────────────────────
   function initPlaces() {
     if (!window.google?.maps?.places) return;
     const ac = new google.maps.places.Autocomplete(addressInput, {
       types: ['address'],
       componentRestrictions: { country: 'us' },
       bounds: new google.maps.LatLngBounds(
-        new google.maps.LatLng(35.32, -82.75), // SW Buncombe County
-        new google.maps.LatLng(35.73, -82.22)  // NE Buncombe County
+        new google.maps.LatLng(35.32, -82.75),
+        new google.maps.LatLng(35.73, -82.22)
       ),
       strictBounds: false,
       fields: ['formatted_address'],
     });
     ac.addListener('place_changed', () => {
-      const place = ac.getPlace();
-      if (place.formatted_address) {
-        addressInput.value = place.formatted_address;
-      }
+      const p = ac.getPlace();
+      if (p.formatted_address) addressInput.value = p.formatted_address;
     });
   }
   window.__henry_init_places__ = initPlaces;
 
-  // Load Google Places script — fetch key from /api/web/config at runtime
-  fetch('/api/web/config')
-    .then((r) => r.json())
-    .then((cfg) => {
-      const key = cfg?.googlePlacesKey;
-      if (key) {
-        const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places&callback=__henry_init_places__`;
-        script.async = true;
-        script.defer = true;
-        document.body.appendChild(script);
-      }
-    })
-    .catch(() => { /* no autocomplete, manual entry still works */ });
+  fetch('/api/web/config').then(r => r.json()).then(cfg => {
+    if (cfg?.googlePlacesKey) {
+      const s = document.createElement('script');
+      s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(cfg.googlePlacesKey)}&libraries=places&callback=__henry_init_places__`;
+      s.async = true; s.defer = true;
+      document.body.appendChild(s);
+    }
+  }).catch(() => {});
 
   // ── Init ───────────────────────────────────────────────────────────────────
   loadHistory();
+  // Poll for running searches
+  setInterval(() => {
+    const cards = document.querySelectorAll('.dot.running');
+    if (cards.length) loadHistory();
+  }, 5000);
+
 })();
 </script>
-
 </body>
 </html>

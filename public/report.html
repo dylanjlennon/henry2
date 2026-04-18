@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Henry — Property Report</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f5f6f8;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #1a202c;
+      --muted: #718096;
+      --muted2: #a0aec0;
+      --accent: #2563eb;
+      --accent-bg: #eff6ff;
+      --success: #059669;
+      --success-bg: #f0fdf4;
+      --success-border: #bbf7d0;
+      --warn: #d97706;
+      --warn-bg: #fffbeb;
+      --warn-border: #fde68a;
+      --danger: #dc2626;
+      --danger-bg: #fef2f2;
+      --danger-border: #fecaca;
+      --radius: 12px;
+      --shadow: 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.04);
+      --shadow-lg: 0 4px 16px rgba(0,0,0,.08);
+    }
+    body { font-family: 'Inter', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    /* ── HEADER ── */
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 28px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .logo { font-weight: 700; font-size: 18px; letter-spacing: -.4px; color: var(--text); text-decoration: none; }
+    .logo em { color: var(--accent); font-style: normal; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .new-search { font-size: 13px; color: var(--accent); font-weight: 500; text-decoration: none; }
+    .new-search:hover { text-decoration: underline; }
+
+    /* ── PROPERTY HEADER ── */
+    .prop-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 24px 28px; }
+    .prop-header-inner { max-width: 1200px; margin: 0 auto; }
+    .prop-address { font-size: 22px; font-weight: 700; letter-spacing: -.4px; margin-bottom: 6px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .prop-pin { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; background: var(--bg); color: var(--muted); padding: 3px 10px; border-radius: 6px; border: 1px solid var(--border); white-space: nowrap; }
+    .prop-meta { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 6px; }
+    .prop-meta span { display: flex; align-items: center; gap: 5px; }
+    .badge { font-size: 11px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; padding: 3px 10px; border-radius: 999px; }
+    .badge-blue { background: var(--accent-bg); color: var(--accent); }
+    .badge-green { background: var(--success-bg); color: var(--success); }
+    .badge-amber { background: var(--warn-bg); color: var(--warn); }
+    .badge-red { background: var(--danger-bg); color: var(--danger); }
+    .badge-gray { background: #f1f5f9; color: var(--muted); }
+
+    /* ── LAYOUT ── */
+    .report-layout { max-width: 1200px; margin: 0 auto; padding: 28px 28px 80px; display: grid; grid-template-columns: 1fr 320px; gap: 24px; }
+    @media (max-width: 900px) { .report-layout { grid-template-columns: 1fr; } .doc-panel { order: -1; } }
+
+    /* ── RISK SIGNALS ── */
+    .signals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 24px; }
+    @media (max-width: 600px) { .signals { grid-template-columns: 1fr; } }
+    .signal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); border-left: 4px solid transparent; }
+    .signal-card.green { border-left-color: var(--success); }
+    .signal-card.amber { border-left-color: var(--warn); }
+    .signal-card.red { border-left-color: var(--danger); }
+    .signal-card.gray { border-left-color: var(--border); }
+    .signal-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 8px; }
+    .signal-value { font-size: 18px; font-weight: 700; letter-spacing: -.3px; margin-bottom: 4px; }
+    .signal-sub { font-size: 12px; color: var(--muted); line-height: 1.4; }
+    .signal-card.green .signal-value { color: var(--success); }
+    .signal-card.amber .signal-value { color: var(--warn); }
+    .signal-card.red .signal-value { color: var(--danger); }
+
+    /* ── SECTIONS ── */
+    .section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px; margin-bottom: 16px; box-shadow: var(--shadow); }
+    .section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* ── DATA GRID ── */
+    .data-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px 24px; }
+    .data-item label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: var(--muted2); display: block; margin-bottom: 3px; }
+    .data-item .val { font-size: 15px; font-weight: 600; color: var(--text); }
+    .data-item .val.mono { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+    .data-item .val.muted { color: var(--muted); font-weight: 400; }
+    .data-item .val.green { color: var(--success); }
+    .data-item .val.amber { color: var(--warn); }
+    .data-item .val.red { color: var(--danger); }
+
+    /* ── INLINE ITEMS ── */
+    .inline-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .inline-row:last-child { border-bottom: none; padding-bottom: 0; }
+    .inline-row:first-child { padding-top: 0; }
+    .inline-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .inline-content { flex: 1; min-width: 0; }
+    .inline-title { font-weight: 600; font-size: 14px; margin-bottom: 2px; }
+    .inline-sub { font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+    /* ── NEIGHBORS TABLE ── */
+    .neighbors-table { width: 100%; font-size: 13px; }
+    .neighbors-table th { text-align: left; padding: 6px 10px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; border-bottom: 2px solid var(--border); }
+    .neighbors-table td { padding: 9px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    .neighbors-table tr:last-child td { border-bottom: none; }
+    .neighbors-table td.owner { font-weight: 500; }
+    .neighbors-table td.pin { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+    .neighbors-table td.addr { color: var(--muted); }
+
+    /* ── NRI HAZARDS ── */
+    .hazard-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+    .hazard-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); font-size: 13px; }
+    .hazard-name { font-weight: 500; }
+    .hazard-rating { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+    .rating-vh { background: #fef2f2; color: var(--danger); }
+    .rating-rh { background: #fff7ed; color: #ea580c; }
+    .rating-rm { background: var(--warn-bg); color: var(--warn); }
+    .rating-rl { background: var(--success-bg); color: var(--success); }
+    .rating-vl { background: #f0fdf4; color: #16a34a; }
+    .rating-nd { background: #f8fafc; color: var(--muted2); }
+
+    /* ── DOCUMENTS PANEL ── */
+    .doc-panel { }
+    .doc-panel-inner { position: sticky; top: 80px; }
+    .doc-panel-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 14px; }
+    .doc-list { display: flex; flex-direction: column; gap: 8px; }
+    .doc-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); transition: box-shadow .15s, border-color .15s; animation: fadeIn .25s ease; }
+    .doc-card:hover { box-shadow: var(--shadow-lg); border-color: #c7d7f8; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+    .doc-icon { font-size: 24px; flex-shrink: 0; }
+    .doc-info { flex: 1; min-width: 0; }
+    .doc-label { font-weight: 600; font-size: 13px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .doc-size { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .doc-dl { font-size: 18px; color: var(--accent); flex-shrink: 0; }
+    .doc-empty { text-align: center; padding: 32px 0; color: var(--muted); font-size: 13px; }
+    .doc-waiting { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); padding: 14px 0; }
+    .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── PROGRESS ── */
+    .progress-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 20px; margin-bottom: 16px; box-shadow: var(--shadow); }
+    .progress-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; cursor: pointer; }
+    .progress-header-title { font-size: 13px; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+    .progress-elapsed { font-size: 12px; color: var(--muted2); font-variant-numeric: tabular-nums; }
+    .fetcher-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px; }
+    .fetcher-pill { display: flex; align-items: center; gap: 7px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 12px; }
+    .fetcher-pill.completed { border-color: var(--success-border); background: var(--success-bg); }
+    .fetcher-pill.failed { border-color: var(--danger-border); background: var(--danger-bg); }
+    .fetcher-pill.skipped { opacity: .6; }
+    .fetcher-pill .fp-icon { flex-shrink: 0; font-size: 12px; }
+    .fetcher-pill .fp-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── STATUS BAR ── */
+    .status-bar { display: none; align-items: center; gap: 10px; padding: 12px 18px; border-radius: 10px; font-size: 14px; margin-bottom: 16px; }
+    .status-bar.show { display: flex; }
+    .status-bar.ok { background: var(--success-bg); border: 1px solid var(--success-border); color: #065f46; }
+    .status-bar.warn { background: var(--warn-bg); border: 1px solid var(--warn-border); color: #78350f; }
+    .status-bar.error { background: var(--danger-bg); border: 1px solid var(--danger-border); color: #7f1d1d; }
+
+    /* ── SKELETON ── */
+    .skeleton { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 4px; }
+    @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+    .skel-line { height: 14px; margin-bottom: 8px; }
+    .skel-sm { width: 40%; }
+    .skel-md { width: 65%; }
+    .skel-lg { width: 85%; }
+
+    /* ── LOADING STATE ── */
+    #loading-overlay { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 200px; gap: 14px; color: var(--muted); font-size: 14px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="/app.html">Henry<em>.</em></a>
+  <div class="header-right">
+    <a class="new-search" href="/app.html">← New search</a>
+  </div>
+</header>
+
+<!-- Property header populated by JS -->
+<div class="prop-header" id="prop-header" style="display:none">
+  <div class="prop-header-inner">
+    <div class="prop-address" id="prop-address">
+      <span id="prop-addr-text">—</span>
+      <span class="prop-pin" id="prop-pin-text">—</span>
+    </div>
+    <div class="prop-meta" id="prop-meta"></div>
+  </div>
+</div>
+
+<div id="loading-overlay">
+  <div class="spinner" style="width:28px;height:28px;border-width:3px"></div>
+  <span>Loading report…</span>
+</div>
+
+<div class="report-layout" id="report-layout" style="display:none">
+
+  <!-- ── MAIN COLUMN ── -->
+  <div class="report-main">
+
+    <!-- Status bar -->
+    <div class="status-bar" id="status-bar"></div>
+
+    <!-- Risk signals -->
+    <div class="signals" id="signals">
+      <div class="signal-card gray" id="sig-flood">
+        <div class="signal-label">FEMA Flood Zone</div>
+        <div class="skeleton skel-line skel-md" style="margin-top:6px"></div>
+        <div class="skeleton skel-line skel-sm" style="margin-top:4px;height:11px"></div>
+      </div>
+      <div class="signal-card gray" id="sig-landslide">
+        <div class="signal-label">Landslide Hazard</div>
+        <div class="skeleton skel-line skel-md" style="margin-top:6px"></div>
+        <div class="skeleton skel-line skel-sm" style="margin-top:4px;height:11px"></div>
+      </div>
+      <div class="signal-card gray" id="sig-nri">
+        <div class="signal-label">National Risk Index</div>
+        <div class="skeleton skel-line skel-md" style="margin-top:6px"></div>
+        <div class="skeleton skel-line skel-sm" style="margin-top:4px;height:11px"></div>
+      </div>
+    </div>
+
+    <!-- Property overview -->
+    <div class="section" id="sec-property">
+      <div class="section-title">Property Overview</div>
+      <div class="data-grid" id="grid-property">
+        <div class="data-item"><label>Total Value</label><div class="skeleton skel-line skel-md"></div></div>
+        <div class="data-item"><label>Land Value</label><div class="skeleton skel-line skel-sm"></div></div>
+        <div class="data-item"><label>Acreage</label><div class="skeleton skel-line skel-sm"></div></div>
+        <div class="data-item"><label>Year Built</label><div class="skeleton skel-line skel-sm"></div></div>
+      </div>
+    </div>
+
+    <!-- Regulatory -->
+    <div class="section" id="sec-regulatory">
+      <div class="section-title">Regulatory Status</div>
+      <div id="regulatory-content">
+        <div class="inline-row"><div class="skeleton skel-line skel-lg"></div></div>
+        <div class="inline-row"><div class="skeleton skel-line skel-md"></div></div>
+        <div class="inline-row"><div class="skeleton skel-line skel-lg"></div></div>
+      </div>
+    </div>
+
+    <!-- Environmental -->
+    <div class="section" id="sec-env">
+      <div class="section-title">Environmental</div>
+      <div class="data-grid" id="grid-env">
+        <div class="data-item"><label>Elevation</label><div class="skeleton skel-line skel-sm"></div></div>
+        <div class="data-item"><label>Slope</label><div class="skeleton skel-line skel-sm"></div></div>
+        <div class="data-item"><label>Soil Type</label><div class="skeleton skel-line skel-md"></div></div>
+        <div class="data-item"><label>Septic Suitability</label><div class="skeleton skel-line skel-sm"></div></div>
+      </div>
+    </div>
+
+    <!-- NRI detail -->
+    <div class="section" id="sec-nri">
+      <div class="section-title">FEMA National Risk Index — Hazard Breakdown</div>
+      <div id="nri-content">
+        <div class="skeleton skel-line skel-lg"></div>
+        <div class="skeleton skel-line skel-md" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- Flood detail -->
+    <div class="section" id="sec-flood">
+      <div class="section-title">Flood Detail</div>
+      <div class="data-grid" id="grid-flood">
+        <div class="data-item"><label>Zone</label><div class="skeleton skel-line skel-sm"></div></div>
+        <div class="data-item"><label>FIRM Panel</label><div class="skeleton skel-line skel-md"></div></div>
+        <div class="data-item"><label>Effective Date</label><div class="skeleton skel-line skel-md"></div></div>
+        <div class="data-item"><label>Base Flood Elev.</label><div class="skeleton skel-line skel-sm"></div></div>
+      </div>
+    </div>
+
+    <!-- Neighbors -->
+    <div class="section" id="sec-neighbors">
+      <div class="section-title">Neighboring Parcels</div>
+      <div id="neighbors-content">
+        <div class="skeleton skel-line skel-lg"></div>
+        <div class="skeleton skel-line skel-md" style="margin-top:8px"></div>
+        <div class="skeleton skel-line skel-lg" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <!-- Research provenance (collapsed) -->
+    <div class="progress-section">
+      <div class="progress-header" id="progress-toggle">
+        <span class="progress-header-title">
+          <span id="progress-summary-text">Fetching data…</span>
+        </span>
+        <span class="progress-elapsed" id="elapsed">0s</span>
+      </div>
+      <div class="fetcher-grid" id="fetcher-grid"></div>
+    </div>
+
+  </div>
+
+  <!-- ── DOCUMENT PANEL ── -->
+  <div class="doc-panel">
+    <div class="doc-panel-inner">
+      <div class="doc-panel-title" id="doc-panel-title">Documents</div>
+      <div class="doc-list" id="doc-list">
+        <div class="doc-waiting"><div class="spinner"></div><span>Generating documents…</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  const params = new URLSearchParams(location.search);
+  const runId = params.get('run');
+  if (!runId) { location.href = '/app.html'; }
+
+  let pollInterval = null;
+  let elapsedInterval = null;
+  let startTime = null;
+  let knownArtifactIds = new Set();
+  let dataApplied = {};
+
+  const ALL_FETCHERS = [
+    'parcel-json','fema-flood','septic','jurisdiction','adjacent-parcels',
+    'historic-district','slope','landslide-hazard','national-risk-index','soil-septic',
+    'str-eligibility','property-card','tax-bill','deed','plat',
+    'gis-map','firmette','sewer-map','buncombe-permits','simplicity-property','asheville-permits',
+  ];
+
+  // ── DOM ────────────────────────────────────────────────────────────────────
+  const loadOverlay       = document.getElementById('loading-overlay');
+  const reportLayout      = document.getElementById('report-layout');
+  const propHeader        = document.getElementById('prop-header');
+  const propAddrText      = document.getElementById('prop-addr-text');
+  const propPinText       = document.getElementById('prop-pin-text');
+  const propMeta          = document.getElementById('prop-meta');
+  const statusBar         = document.getElementById('status-bar');
+  const sigFlood          = document.getElementById('sig-flood');
+  const sigLandslide      = document.getElementById('sig-landslide');
+  const sigNri            = document.getElementById('sig-nri');
+  const gridProperty      = document.getElementById('grid-property');
+  const regulatoryContent = document.getElementById('regulatory-content');
+  const gridEnv           = document.getElementById('grid-env');
+  const nriContent        = document.getElementById('nri-content');
+  const gridFlood         = document.getElementById('grid-flood');
+  const neighborsContent  = document.getElementById('neighbors-content');
+  const progressText      = document.getElementById('progress-summary-text');
+  const elapsedEl         = document.getElementById('elapsed');
+  const fetcherGrid       = document.getElementById('fetcher-grid');
+  const docList           = document.getElementById('doc-list');
+  const docPanelTitle     = document.getElementById('doc-panel-title');
+
+  // ── Bootstrap ──────────────────────────────────────────────────────────────
+  initFetcherGrid();
+  loadRun();
+
+  async function loadRun() {
+    try {
+      const resp = await fetch(`/api/web/status/${runId}`);
+      if (!resp.ok) { location.href = '/app.html'; return; }
+      const data = await resp.json();
+
+      document.title = `Henry — ${data.address || data.pin}`;
+      showHeader(data);
+      loadOverlay.style.display = 'none';
+      reportLayout.style.display = 'grid';
+
+      applyStatus(data);
+
+      startTime = new Date(data.startedAt).getTime();
+      elapsedInterval = setInterval(() => {
+        const s = Math.floor((Date.now() - startTime) / 1000);
+        elapsedEl.textContent = s >= 60 ? `${Math.floor(s/60)}m ${s%60}s` : `${s}s`;
+      }, 1000);
+
+      if (data.status === 'running') {
+        pollInterval = setInterval(poll, 2500);
+      } else {
+        clearInterval(elapsedInterval);
+        showFinished(data);
+      }
+    } catch {
+      loadOverlay.innerHTML = '<div style="color:#dc2626">Could not load report. <a href="/app.html">Back to search</a></div>';
+    }
+  }
+
+  async function poll() {
+    try {
+      const resp = await fetch(`/api/web/status/${runId}`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      applyStatus(data);
+      if (data.status !== 'running') {
+        clearInterval(pollInterval);
+        clearInterval(elapsedInterval);
+        showFinished(data);
+      }
+    } catch { /* transient */ }
+  }
+
+  // ── Header ─────────────────────────────────────────────────────────────────
+  function showHeader(data) {
+    propAddrText.textContent = data.address || data.pin;
+    propPinText.textContent = data.pin;
+    const meta = [];
+    if (data.ownerName) meta.push(`<span>👤 ${esc(data.ownerName)}</span>`);
+    meta.push(`<span><span class="badge badge-blue">Buncombe County, NC</span></span>`);
+    propMeta.innerHTML = meta.join('');
+    propHeader.style.display = 'block';
+  }
+
+  // ── Status apply ───────────────────────────────────────────────────────────
+  function applyStatus(data) {
+    // Fetcher pills
+    const statuses = data.fetcherStatuses || {};
+    for (const id of ALL_FETCHERS) {
+      const pill = document.getElementById(`fp-${id}`);
+      const st = statuses[id];
+      if (!pill || !st) continue;
+      pill.className = `fetcher-pill ${st}`;
+      const icon = pill.querySelector('.fp-icon');
+      icon.textContent = st === 'completed' ? '✓' : st === 'failed' ? '✗' : st === 'skipped' ? '→' : '·';
+    }
+
+    // Artifacts
+    for (const art of (data.artifacts || [])) {
+      if (knownArtifactIds.has(art.id)) continue;
+      knownArtifactIds.add(art.id);
+      if (art.contentType !== 'application/json') addDocCard(art);
+    }
+
+    // Data sections — only apply each once (they don't change after completion)
+    const fd = data.fetcherData || {};
+    if (fd['parcel-json'] && !dataApplied['parcel-json']) { renderPropertyOverview(fd['parcel-json']); dataApplied['parcel-json'] = true; }
+    if (fd['fema-flood'] && !dataApplied['fema-flood']) { renderFloodSignal(fd['fema-flood']); renderFloodDetail(fd['fema-flood']); dataApplied['fema-flood'] = true; }
+    if (fd['landslide-hazard'] && !dataApplied['landslide-hazard']) { renderLandslideSignal(fd['landslide-hazard']); dataApplied['landslide-hazard'] = true; }
+    if (fd['national-risk-index'] && !dataApplied['national-risk-index']) { renderNriSignal(fd['national-risk-index']); renderNriDetail(fd['national-risk-index']); dataApplied['national-risk-index'] = true; }
+    if (!dataApplied['regulatory'] && (fd['jurisdiction'] || fd['str-eligibility'] || fd['historic-district'])) {
+      renderRegulatory(fd); dataApplied['regulatory'] = true;
+    }
+    if (!dataApplied['env'] && (fd['slope'] || fd['soil-septic'] || fd['septic'])) {
+      renderEnv(fd); dataApplied['env'] = true;
+    }
+    if (fd['adjacent-parcels'] && !dataApplied['adjacent-parcels']) { renderNeighbors(fd['adjacent-parcels']); dataApplied['adjacent-parcels'] = true; }
+
+    // Progress summary
+    const total = data.fetchersPlanned || ALL_FETCHERS.length;
+    const done = data.fetchersCompleted || 0;
+    const failed = data.fetchersFailed || 0;
+    const docs = knownArtifactIds.size;
+    if (data.status === 'running') {
+      progressText.textContent = `Fetching… ${done}/${total} done${docs > 0 ? `, ${docs} doc${docs > 1 ? 's' : ''} ready` : ''}`;
+    }
+    docPanelTitle.textContent = docs > 0 ? `Documents (${docs})` : 'Documents';
+  }
+
+  function showFinished(data) {
+    const docs = knownArtifactIds.size;
+    const failed = data.fetchersFailed || 0;
+    const total = data.fetchersPlanned || 21;
+    const secs = data.durationMs ? (data.durationMs / 1000).toFixed(1) : '?';
+    progressText.textContent = `${data.fetchersCompleted}/${total} fetchers · ${docs} documents · ${secs}s`;
+    elapsedEl.textContent = '';
+
+    if (docs > 0) {
+      const waiting = docList.querySelector('.doc-waiting');
+      if (waiting) waiting.remove();
+    }
+
+    if (failed === 0) {
+      statusBar.className = 'status-bar show ok';
+      statusBar.innerHTML = `<span>✓</span> Research complete — ${data.fetchersCompleted}/${total} data sources fetched, ${docs} documents ready.`;
+    } else {
+      statusBar.className = 'status-bar show warn';
+      statusBar.innerHTML = `<span>⚠</span> ${data.fetchersCompleted}/${total} fetchers succeeded · ${failed} failed · ${docs} documents ready`;
+    }
+  }
+
+  // ── Section renderers ──────────────────────────────────────────────────────
+  function renderPropertyOverview(d) {
+    const a = d.attributes || {};
+    const items = [];
+    if (a.TotalValue != null) items.push(di('Total Value', '$' + num(a.TotalValue)));
+    if (a.LandValue != null) items.push(di('Land Value', '$' + num(a.LandValue)));
+    if (a.ImprovValue != null) items.push(di('Improvement Value', '$' + num(a.ImprovValue)));
+    if (a.Acreage ?? a.ACREAGE) items.push(di('Acreage', (a.Acreage ?? a.ACREAGE) + ' ac'));
+    if (a.YearBuilt ?? a.YEARBUILT) items.push(di('Year Built', a.YearBuilt ?? a.YEARBUILT));
+    if (a.DeedBook && a.DeedPage) items.push(di('Deed Ref', `Book ${a.DeedBook} / Page ${a.DeedPage}`, 'mono'));
+    if (a.PlatBook && a.PlatPage) items.push(di('Plat Ref', `Book ${a.PlatBook} / Page ${a.PlatPage}`, 'mono'));
+    if (a.LotNumber) items.push(di('Lot', a.LotNumber));
+    if (a.SubDivision ?? a.SUBDIVISION) items.push(di('Subdivision', a.SubDivision ?? a.SUBDIVISION));
+    gridProperty.innerHTML = items.join('') || '<div style="color:var(--muted);font-size:13px">No parcel data available</div>';
+  }
+
+  function renderFloodSignal(d) {
+    const zone = String(d.floodZone || 'NOT MAPPED');
+    const inSFHA = d.inSpecialFloodHazardArea === true;
+    let cls = 'green', sub = 'Minimal flood hazard';
+    if (zone.startsWith('A') || zone.startsWith('V')) { cls = 'red'; sub = 'High-risk flood zone — insurance likely required'; }
+    else if (zone.startsWith('X') && inSFHA) { cls = 'amber'; sub = 'Moderate flood risk'; }
+    else if (zone === 'NOT MAPPED') { cls = 'gray'; sub = 'No FEMA data for this area'; }
+    sigFlood.className = `signal-card ${cls}`;
+    sigFlood.innerHTML = `<div class="signal-label">FEMA Flood Zone</div><div class="signal-value">Zone ${esc(zone)}</div><div class="signal-sub">${sub}</div>`;
+  }
+
+  function renderFloodDetail(d) {
+    const bfe = Number(d.baseFloodElevation);
+    const bfeLabel = (d.baseFloodElevation != null && bfe > -9000) ? bfe + ' ft' : 'N/A';
+    const panel = d.firmPanel ? String(d.firmPanel) : '—';
+    let effDate = '—';
+    if (d.firmPanelEffectiveDate) {
+      const dt = new Date(d.firmPanelEffectiveDate);
+      if (!isNaN(dt.getTime())) effDate = dt.toLocaleDateString('en-US');
+    }
+    gridFlood.innerHTML = [
+      di('Zone', String(d.floodZone || 'NOT MAPPED')),
+      di('Subtype', String(d.zoneSubtype || '—'), 'muted'),
+      di('FIRM Panel', panel, 'mono'),
+      di('Effective Date', effDate),
+      di('Base Flood Elev.', bfeLabel),
+    ].join('');
+  }
+
+  function renderLandslideSignal(d) {
+    const risk = String(d.riskLevel || 'none');
+    const cls = risk === 'high' ? 'red' : risk === 'moderate' ? 'amber' : risk === 'low' ? 'amber' : 'green';
+    const label = risk.charAt(0).toUpperCase() + risk.slice(1) + ' Risk';
+    const parts = [];
+    if (d.stabilityLabel) parts.push(d.stabilityLabel + ' stability');
+    if (Number(d.debrisFlowCount) > 0) parts.push(`${d.debrisFlowCount} debris flow zone(s)`);
+    if (Number(d.nearbyLandslideCount) > 0) parts.push(`${d.nearbyLandslideCount} historic events nearby`);
+    const sub = parts.join(' · ') || 'No hazard features detected';
+    sigLandslide.className = `signal-card ${cls}`;
+    sigLandslide.innerHTML = `<div class="signal-label">Landslide Hazard</div><div class="signal-value">${label}</div><div class="signal-sub">${esc(sub)}</div>`;
+  }
+
+  function renderNriSignal(d) {
+    const rating = String(d.compositeRating || '—');
+    const score = d.compositeScore != null ? ` (${d.compositeScore})` : '';
+    const cls = /very high/i.test(rating) ? 'red' : /relatively high/i.test(rating) ? 'amber' : /moderate/i.test(rating) ? 'amber' : /low/i.test(rating) ? 'green' : 'gray';
+    const tops = (d.topHazards || []).slice(0, 3).join(', ');
+    sigNri.className = `signal-card ${cls}`;
+    sigNri.innerHTML = `<div class="signal-label">National Risk Index</div><div class="signal-value">${esc(rating)}</div><div class="signal-sub">${score ? 'Score: ' + d.compositeScore : ''}${tops ? (score ? ' · ' : '') + tops : ''}</div>`;
+  }
+
+  function renderNriDetail(d) {
+    if (!d.hazards || !d.hazards.length) {
+      nriContent.innerHTML = '<div style="color:var(--muted);font-size:13px">NRI data unavailable for this census tract.</div>';
+      return;
+    }
+    const tractLine = d.tractId ? `<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Census tract: ${esc(d.tractId)}</div>` : '';
+    const items = d.hazards
+      .filter(h => h.score != null && h.score > 0)
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .map(h => {
+        const r = String(h.rating || '');
+        const cls = /very high/i.test(r) ? 'rating-vh' : /relatively high/i.test(r) ? 'rating-rh' : /moderate/i.test(r) ? 'rating-rm' : /relatively low/i.test(r) ? 'rating-rl' : /very low/i.test(r) ? 'rating-vl' : 'rating-nd';
+        return `<div class="hazard-item"><span class="hazard-name">${esc(h.hazard)}</span><span class="hazard-rating ${cls}">${esc(r || 'N/D')}</span></div>`;
+      }).join('');
+    nriContent.innerHTML = tractLine + (items ? `<div class="hazard-list">${items}</div>` : '<div style="color:var(--muted);font-size:13px">No hazard scores available.</div>');
+  }
+
+  function renderRegulatory(fd) {
+    const jur = fd['jurisdiction'] || {};
+    const str = fd['str-eligibility'] || {};
+    const hist = fd['historic-district'] || {};
+    const rows = [];
+
+    // Jurisdiction
+    if (jur.jurisdiction) {
+      const badge = jur.isAsheville ? '<span class="badge badge-blue">City of Asheville</span>' : jur.isUnincorporated ? '<span class="badge badge-gray">Unincorporated</span>' : `<span class="badge badge-gray">${esc(jur.jurisdiction)}</span>`;
+      rows.push(`<div class="inline-row"><div class="inline-icon">📍</div><div class="inline-content"><div class="inline-title">Jurisdiction</div><div class="inline-sub">${esc(jur.jurisdiction)} ${badge}</div></div></div>`);
+    }
+
+    // STR eligibility
+    if (str.rulesJurisdiction || str.summary) {
+      const icon = str.eligible === true ? '✅' : str.eligible === false ? '❌' : '❓';
+      rows.push(`<div class="inline-row"><div class="inline-icon">${icon}</div><div class="inline-content"><div class="inline-title">Short-Term Rental${str.zoningDistrict ? ` — Zone ${esc(str.zoningDistrict)}` : ''}</div><div class="inline-sub">${esc(str.summary || '')}${str.activePermitCount > 0 ? ` <strong>${str.activePermitCount} active permit(s)</strong>` : ''}</div></div></div>`);
+    }
+
+    // Historic district
+    if (hist.layerChecked && !String(hist.layerChecked).startsWith('unavailable')) {
+      const icon = hist.inLocalHistoricDistrict ? '🏛' : '🏘';
+      const title = hist.inLocalHistoricDistrict ? `Historic District — ${esc(hist.districtName || 'Local Historic District')}` : 'Not in Local Historic District';
+      const sub = hist.inLocalHistoricDistrict ? 'Certificate of Appropriateness required for exterior changes (HPC)' : 'No local historic overlay restrictions';
+      rows.push(`<div class="inline-row"><div class="inline-icon">${icon}</div><div class="inline-content"><div class="inline-title">${title}</div><div class="inline-sub">${sub}</div></div></div>`);
+    }
+
+    regulatoryContent.innerHTML = rows.join('') || '<div style="color:var(--muted);font-size:13px">Regulatory data loading…</div>';
+  }
+
+  function renderEnv(fd) {
+    const slope = fd['slope'] || {};
+    const soil  = fd['soil-septic'] || {};
+    const septic = fd['septic'] || {};
+    const items = [];
+
+    if (slope.elevationFt != null) items.push(di('Elevation', slope.elevationFt + ' ft'));
+    if (slope.slopePct != null) items.push(di('Slope', slope.slopePct + '%' + (slope.slopeDeg != null ? ` (${slope.slopeDeg}°)` : '')));
+    if (soil.mapUnitName) items.push(di('Soil Type', soil.mapUnitName, soil.componentName ? '' : 'muted'));
+    if (soil.componentName) items.push(di('Soil Component', soil.componentName));
+    if (soil.texture) items.push(di('Soil Texture', soil.texture));
+    if (soil.septicRating) {
+      const cls = soil.septicRating === 'Not limited' ? 'green' : soil.septicRating === 'Very limited' ? 'red' : 'amber';
+      items.push(di('Septic Suitability', soil.septicRating, cls));
+    }
+    if (!soil.septicRating && septic.onSeptic != null) {
+      items.push(di('Septic Records', septic.onSeptic ? 'On septic' : 'No records (likely sewer)'));
+    }
+
+    gridEnv.innerHTML = items.join('') || '<div style="color:var(--muted);font-size:13px">Environmental data loading…</div>';
+  }
+
+  function renderNeighbors(d) {
+    const neighbors = d.neighbors || [];
+    if (!neighbors.length) {
+      neighborsContent.innerHTML = '<div style="color:var(--muted);font-size:13px">No adjacent parcels found in the vicinity.</div>';
+      return;
+    }
+    const rows = neighbors.map(n =>
+      `<tr><td class="owner">${esc(n.owner)}</td><td class="addr">${esc(n.address || '—')}</td><td class="pin">${esc(n.pin)}</td></tr>`
+    ).join('');
+    neighborsContent.innerHTML = `<table class="neighbors-table"><thead><tr><th>Owner</th><th>Address</th><th>PIN</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  // ── Documents ──────────────────────────────────────────────────────────────
+  function addDocCard(art) {
+    const waiting = docList.querySelector('.doc-waiting');
+    if (waiting) waiting.remove();
+    const icon = art.contentType === 'application/pdf' ? '📄' : art.contentType.startsWith('image/') ? '🖼' : art.contentType === 'text/csv' ? '📊' : '📎';
+    const kb = art.bytes ? Math.round(art.bytes / 1024) + ' KB' : '';
+    const a = document.createElement('a');
+    a.className = 'doc-card';
+    a.href = `/api/artifact/${art.id}`;
+    a.target = '_blank';
+    a.download = '';
+    a.innerHTML = `<span class="doc-icon">${icon}</span><div class="doc-info"><div class="doc-label">${esc(art.label)}</div>${kb ? `<div class="doc-size">${kb}</div>` : ''}</div><span class="doc-dl">⬇</span>`;
+    docList.appendChild(a);
+  }
+
+  // ── Fetcher grid init ──────────────────────────────────────────────────────
+  function initFetcherGrid() {
+    fetcherGrid.innerHTML = ALL_FETCHERS.map(id =>
+      `<div class="fetcher-pill" id="fp-${id}"><span class="fp-icon">·</span><span class="fp-name">${id}</span></div>`
+    ).join('');
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  function di(label, val, cls) {
+    const c = cls ? ` ${cls}` : '';
+    return `<div class="data-item"><label>${esc(label)}</label><div class="val${c}">${esc(String(val ?? '—'))}</div></div>`;
+  }
+  function num(v) { return Number(v).toLocaleString(); }
+  function esc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+})();
+</script>
+</body>
+</html>
