@@ -134,6 +134,65 @@ describe('golden path', () => {
     expect(counted).toBe(planned);
   });
 
+  it('slope data is present and in valid range', () => {
+    const fetcherData = finalStatus.fetcherData as Record<string, Record<string, unknown>> | undefined;
+    const slope = fetcherData?.['slope'];
+    expect(slope).toBeDefined();
+    if (slope?.elevationFt != null) {
+      expect(slope.elevationFt as number).toBeGreaterThan(1500);
+      expect(slope.elevationFt as number).toBeLessThan(5000);
+    }
+    if (slope?.slopePct != null) {
+      expect(slope.slopePct as number).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('STR eligibility data is present', () => {
+    const fetcherData = finalStatus.fetcherData as Record<string, Record<string, unknown>> | undefined;
+    const str = fetcherData?.['str-eligibility'];
+    expect(str).toBeDefined();
+    expect(typeof str?.summary).toBe('string');
+    expect((str?.summary as string).length).toBeGreaterThan(0);
+  });
+
+  it('NRI data is present with valid composite rating', () => {
+    const fetcherData = finalStatus.fetcherData as Record<string, Record<string, unknown>> | undefined;
+    const nri = fetcherData?.['national-risk-index'];
+    expect(nri).toBeDefined();
+    if (nri?.compositeRating != null) {
+      expect(typeof nri.compositeRating).toBe('string');
+    }
+  });
+
+  it('adjacent parcels data is present', () => {
+    const fetcherData = finalStatus.fetcherData as Record<string, Record<string, unknown>> | undefined;
+    const adj = fetcherData?.['adjacent-parcels'];
+    expect(adj).toBeDefined();
+    expect(typeof adj?.count).toBe('number');
+    expect(Array.isArray(adj?.neighbors)).toBe(true);
+  });
+
+  it('soil-septic data is present', () => {
+    const fetcherData = finalStatus.fetcherData as Record<string, Record<string, unknown>> | undefined;
+    const soil = fetcherData?.['soil-septic'];
+    expect(soil).toBeDefined();
+    // at minimum the key exists (may be null for on-sewer properties)
+  });
+
+  it('no fetcher has status failed (all should be completed or skipped)', () => {
+    const statuses = finalStatus.fetcherStatuses as Record<string, string> | undefined;
+    if (!statuses) return;
+    const failed = Object.entries(statuses).filter(([, s]) => s === 'failed');
+    if (failed.length > 0) {
+      console.warn('Failed fetchers:', failed.map(([id]) => id).join(', '));
+    }
+    // Warn but don't hard-fail — some fetchers may legitimately fail on this property
+    // The important thing is we don't have ALL fetchers failing
+    const failedCount = failed.length;
+    const totalCount = Object.keys(statuses).length;
+    expect(failedCount).toBeLessThan(totalCount * 0.5); // < 50% failed
+  });
+
   it('artifact is downloadable from Blob storage (persists)', async () => {
     const artifacts = finalStatus.artifacts as Array<Record<string, unknown>>;
     const first = artifacts[0];

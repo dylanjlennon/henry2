@@ -16,7 +16,9 @@
     "test:e2e": "vitest run tests/e2e",
     "lint": "tsc --noEmit",
     "resolve": "tsx scripts/resolve.ts",
-    "fetch": "tsx scripts/fetch.ts"
+    "fetch": "tsx scripts/fetch.ts",
+    "health-check": "tsx scripts/healthCheck.ts",
+    "health-check:full": "tsx scripts/healthCheck.ts --asheville"
   },
   "dependencies": {
     "@slack/bolt": "^4.7.0",
