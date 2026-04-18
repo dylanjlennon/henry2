@@ -28,7 +28,7 @@ import type { Invocation, Artifact } from '../../src/provenance/schema.js';
 import type { FetcherResult } from '../../src/types.js';
 
 const OUT_ROOT = process.env.OUT_ROOT ?? join(tmpdir(), 'henry-runs');
-const RATE_LIMIT = 5;
+const RATE_LIMIT = 20;
 const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
 function getBaseUrl(): string | null {
