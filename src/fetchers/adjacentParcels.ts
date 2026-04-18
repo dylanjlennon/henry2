@@ -46,10 +46,17 @@ export const adjacentParcelsFetcher: Fetcher = {
       spatialReference: { wkid: 4326 },
     };
 
-    const neighbors = await queryByEnvelope(envelope, ctx.property.gisPin);
+    const { neighbors, error: queryError } = await queryByEnvelope(envelope, ctx.property.gisPin);
 
     if (!neighbors) {
-      return { fetcher: this.id, status: 'failed', files: [], error: 'GIS query failed', durationMs: Date.now() - t0 };
+      // GIS server unreachable or returned an error — return graceful completed result
+      // so the report page shows "unavailable" rather than a hard failure.
+      ctx.onProgress?.({ fetcher: this.id, status: 'completed' });
+      return {
+        fetcher: this.id, status: 'completed', files: [],
+        data: { neighbors: [], count: 0, unavailable: queryError ?? 'GIS server did not respond' },
+        durationMs: Date.now() - t0,
+      };
     }
 
     ctx.onProgress?.({ fetcher: this.id, status: 'completed' });
@@ -66,34 +73,36 @@ export const adjacentParcelsFetcher: Fetcher = {
 async function queryByEnvelope(
   envelope: { xmin: number; ymin: number; xmax: number; ymax: number; spatialReference: { wkid: number } },
   selfPin: string,
-): Promise<AdjacentParcel[] | null> {
+): Promise<{ neighbors: AdjacentParcel[] | null; error?: string }> {
   try {
     const params = new URLSearchParams({
       geometry: JSON.stringify(envelope),
       geometryType: 'esriGeometryEnvelope',
       inSR: '4326',
       spatialRel: 'esriSpatialRelIntersects',
-      outFields: 'PIN,PINNUM,OwnerName,OwnerName1,Owner,PropAddr,PropertyAddress',
+      outFields: 'PIN,Owner,Address',
       returnGeometry: 'false',
       resultRecordCount: '25',
       f: 'json',
     });
     const resp = await fetch(`${PARCEL_URL}?${params}`, { signal: AbortSignal.timeout(15_000) });
-    if (!resp.ok) return null;
+    if (!resp.ok) return { neighbors: null, error: `HTTP ${resp.status}` };
     const data = await resp.json() as { features?: Array<{ attributes: Record<string, unknown> }>; error?: unknown };
-    if (data.error) return null;
+    if (data.error) return { neighbors: null, error: JSON.stringify(data.error) };
 
     const cleanPin = selfPin.replace(/[-\s]/g, '').toUpperCase();
-    return (data.features ?? [])
+    const neighbors = (data.features ?? [])
       .map((f) => {
         const a = f.attributes;
-        const pin = String(a.PIN ?? a.PINNUM ?? '').replace(/[-\s]/g, '').toUpperCase();
-        const owner = String(a.OwnerName ?? a.OwnerName1 ?? a.Owner ?? '').trim();
-        const address = String(a.PropAddr ?? a.PropertyAddress ?? '').trim();
+        const pin = String(a.PIN ?? '').replace(/[-\s]/g, '').toUpperCase();
+        const owner = String(a.Owner ?? '').trim();
+        const address = String(a.Address ?? '').trim();
         return { pin, owner, address };
       })
       .filter((n) => n.pin && n.pin !== cleanPin && n.owner);
-  } catch {
-    return null;
+    return { neighbors };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { neighbors: null, error: msg };
   }
 }
