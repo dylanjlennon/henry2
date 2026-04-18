@@ -25,17 +25,21 @@
 
 import type { Fetcher, FetcherContext, FetcherResult } from '../types.js';
 
-const ASHEVILLE_ZONING_SERVER = 'https://arcgis.ashevillenc.gov/arcgis/rest/services/Planning/Zoning_Overlays/MapServer';
+// Public ArcGIS Online mirror of Asheville zoning (arcgis.ashevillenc.gov is blocked from cloud)
+// Uses older-style codes: RS2, RS4, RS8, RM6, RM8, CBD, HB, NB, IND, etc.
+const ASHEVILLE_ZONING_URL = 'https://services.arcgis.com/aJ16ENn1AaqdFlqx/arcgis/rest/services/Zoning_ForUrban5/FeatureServer/0/query';
 const ASHEVILLE_PERMITS_API = 'https://data.ashevillenc.gov/resource/9p5s-f3ip.json';
 const JURISDICTION_URL = 'https://gis.buncombecounty.org/arcgis/rest/services/opendata/FeatureServer/4/query';
 
-// Zoning districts where STRs (homestays) are explicitly permitted in Asheville
+// Zoning codes where Asheville allows STRs (homestays). Layer uses old-style codes without hyphens.
 const ASHEVILLE_STR_ALLOWED_ZONES = new Set([
+  // Old-style (Zoning_ForUrban5 layer)
+  'RS2', 'RS4', 'RS8', 'RSMH', 'RM6', 'RM8', 'RM16',
+  'HB', 'NB', 'CBD', 'OB', 'OI',
+  'MX', 'MX1', 'MX2', 'UV', 'UP',
+  // New UDO-style (RS-1 is NOT permitted; all others generally are)
   'RS-2', 'RS-4', 'RS-8', 'RS-MH', 'RM-6', 'RM-8', 'RM-16',
-  'B-1', 'B-2', 'B-3', 'B-4', 'CBD',
-  'MX', 'MX-1', 'MX-2',
-  'OB', 'OI',
-  'IN', 'PM',
+  'B-1', 'B-2', 'B-3', 'B-4', 'MX-1', 'MX-2',
 ]);
 
 export interface StrEligibilityData {
@@ -155,38 +159,22 @@ async function fetchJsonRetry<T>(url: string, timeoutMs: number): Promise<T> {
 }
 
 async function getAshevilleZoning(lon: number, lat: number): Promise<string | null> {
-  // Discover zoning layer ID (retry on transient failure of arcgis.ashevillenc.gov)
-  const rootData = await fetchJsonRetry<{ layers?: Array<{ id: number; name: string }> }>(
-    `${ASHEVILLE_ZONING_SERVER}?f=json`, 15_000,
-  );
-  const layers = rootData.layers ?? [];
-  const zoningLayer = layers.find((l) => /^zoning$/i.test(l.name.trim()))
-    ?? layers.find((l) => /zoning district/i.test(l.name))
-    ?? layers.find((l) => /zoning/i.test(l.name) && !/overlay|historic/i.test(l.name));
-
-  if (!zoningLayer) return null;
-
   const params = new URLSearchParams({
     geometry: `${lon},${lat}`,
     geometryType: 'esriGeometryPoint',
     inSR: '4326',
     spatialRel: 'esriSpatialRelIntersects',
-    outFields: '*',
+    outFields: 'districts',
     returnGeometry: 'false',
     f: 'json',
   });
   const data = await fetchJsonRetry<{ features?: Array<{ attributes: Record<string, unknown> }>; error?: unknown }>(
-    `${ASHEVILLE_ZONING_SERVER}/${zoningLayer.id}/query?${params}`, 15_000,
+    `${ASHEVILLE_ZONING_URL}?${params}`, 15_000,
   );
   if (data.error) return null;
-
   const feat = data.features?.[0];
   if (!feat) return null;
-
-  const a = feat.attributes;
-  return String(
-    a.ZONE_CLASS ?? a.ZONING ?? a.ZONE ?? a.ZoneClass ?? a.zone_class ?? '',
-  ).trim() || null;
+  return String(feat.attributes.districts ?? '').trim().toUpperCase() || null;
 }
 
 async function getAshevilleHomestayPermits(pin: string): Promise<string[]> {
