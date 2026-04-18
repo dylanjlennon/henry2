@@ -63,7 +63,7 @@ export default function PropertyPage({ params }: PropertyPageProps) {
                     }}
                   />
                   <span style={{ fontSize: 'var(--font-size-body)', color: 'var(--color-muted)' }}>
-                    Fetching data… {runStatus.fetchersCompleted}/{runStatus.fetchersTotal} complete
+                    Fetching data… {runStatus.fetchersCompleted}/{runStatus.fetchersPlanned} complete
                   </span>
                   <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                 </div>

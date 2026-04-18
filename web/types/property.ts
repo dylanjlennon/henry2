@@ -82,19 +82,20 @@ export interface WebRunStatus {
   runId: string;
   status: 'running' | 'completed' | 'failed' | 'partial';
   address: string;
-  fetchersTotal: number;
+  pin: string | null;
+  fetchersPlanned: number;
   fetchersCompleted: number;
   fetchersFailed: number;
+  fetcherStatuses: Record<string, string>;
   fetcherData: Record<string, Record<string, unknown>>;
-  artifacts: Array<{ id: string; label: string; contentType: string }>;
-  createdAt: string;
-  completedAt: string | null;
+  artifacts: Array<{ id: string; label: string; contentType: string; bytes: number }>;
+  startedAt: string;
   durationMs: number | null;
 }
 
 export interface HistoryItem {
   runId: string;
   address: string;
-  createdAt: string;
+  startedAt: string;
   status: string;
 }

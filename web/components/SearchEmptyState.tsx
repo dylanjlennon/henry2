@@ -26,11 +26,11 @@ function useNavigateToSearch() {
   }, [router]);
 }
 
-function HistoryCard({ address, status, createdAt, runId }: {
-  address: string; status: string; createdAt: string; runId: string;
+function HistoryCard({ address, status, startedAt, runId }: {
+  address: string; status: string; startedAt: string; runId: string;
 }) {
   const navigate = useNavigateToSearch();
-  const timeAgo = getTimeAgo(createdAt);
+  const timeAgo = getTimeAgo(startedAt);
   const dotColor = status === 'completed' ? 'var(--color-calm)' : status === 'failed' ? 'var(--color-risk)' : 'var(--color-warn)';
 
   return (
@@ -236,7 +236,7 @@ export default function SearchEmptyState() {
                 key={item.runId}
                 address={item.address}
                 status={item.status}
-                createdAt={item.createdAt}
+                startedAt={item.startedAt}
                 runId={item.runId}
               />
             ))}
