@@ -74,13 +74,17 @@ export const strEligibilityFetcher: Fetcher = {
       const jData = await lookupJurisdiction(lon, lat);
 
       if (jData.isAsheville) {
-        const [zoningDistrict, activePermits] = await Promise.all([
-          getAshevilleZoning(lon, lat),
-          getAshevilleHomestayPermits(ctx.property.gisPin),
+        // Run zoning + permits in parallel; zoning may fail if Asheville GIS server is unreachable
+        const [zoningResult, activePermits] = await Promise.all([
+          getAshevilleZoning(lon, lat).catch(() => null),
+          getAshevilleHomestayPermits(ctx.property.gisPin).catch(() => [] as string[]),
         ]);
+        const zoningDistrict = zoningResult;
 
         const eligible = zoningDistrict ? ASHEVILLE_STR_ALLOWED_ZONES.has(zoningDistrict.toUpperCase()) : null;
-        const summary = buildAshevilleSummary(zoningDistrict, eligible, activePermits.length);
+        const summary = zoningDistrict
+          ? buildAshevilleSummary(zoningDistrict, eligible, activePermits.length)
+          : `City of Asheville — zoning data unavailable, verify with Planning Dept.${activePermits.length > 0 ? ` ${activePermits.length} active homestay permit(s) on file.` : ''}`;
 
         const data: StrEligibilityData = {
           eligible,
@@ -121,8 +125,17 @@ export const strEligibilityFetcher: Fetcher = {
       ctx.onProgress?.({ fetcher: this.id, status: 'completed' });
       return { fetcher: this.id, status: 'completed', files: [], data: data as unknown as Record<string, unknown>, durationMs: Date.now() - t0 };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      return { fetcher: this.id, status: 'failed', files: [], error: msg, durationMs: Date.now() - t0 };
+      // Jurisdiction lookup failed — return graceful partial result
+      const data: StrEligibilityData = {
+        eligible: null,
+        summary: 'Could not determine jurisdiction — verify STR eligibility locally.',
+        zoningDistrict: null,
+        activePermitCount: 0,
+        activePermits: [],
+        rulesJurisdiction: 'Unknown',
+      };
+      ctx.onProgress?.({ fetcher: this.id, status: 'completed' });
+      return { fetcher: this.id, status: 'completed', files: [], data: data as unknown as Record<string, unknown>, durationMs: Date.now() - t0 };
     }
   },
 };

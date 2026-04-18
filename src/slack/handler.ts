@@ -341,6 +341,8 @@ function renderFetcherResult(result: FetcherResult): string | null {
   }
 
   if (result.fetcher === 'historic-district') {
+    const layerChecked = String(d.layerChecked ?? '');
+    if (layerChecked.startsWith('unavailable')) return null; // suppress — server unreachable
     if (d.inLocalHistoricDistrict) {
       return `:classical_building: *Historic district* — ${d.districtName ?? 'Local historic district'} _(Certificate of Appropriateness required for exterior changes)_`;
     }

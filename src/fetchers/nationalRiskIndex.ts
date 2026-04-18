@@ -14,7 +14,7 @@
 
 import type { Fetcher, FetcherContext, FetcherResult } from '../types.js';
 
-const NRI_URL = 'https://services.arcgis.com/XG15cJAlne2vxtgt/arcgis/rest/services/NRI_Table_CensusTracts/FeatureServer/0/query';
+const NRI_URL = 'https://services.arcgis.com/XG15cJAlne2vxtgt/arcgis/rest/services/National_Risk_Index_Census_Tracts/FeatureServer/0/query';
 
 // Field suffix conventions: _RATNG = rating string, _SCORE = numeric score (0–100)
 const HAZARD_FIELDS = [

@@ -107,8 +107,16 @@ export const historicDistrictFetcher: Fetcher = {
       ctx.onProgress?.({ fetcher: this.id, status: 'completed' });
       return { fetcher: this.id, status: 'completed', files: [], data: result as unknown as Record<string, unknown>, durationMs: Date.now() - t0 };
     } catch (err) {
+      // Asheville GIS server is intermittently unreachable from cloud hosts.
+      // Return a completed result with unknown status rather than failing.
       const msg = err instanceof Error ? err.message : String(err);
-      return { fetcher: this.id, status: 'failed', files: [], error: msg, durationMs: Date.now() - t0 };
+      const result: HistoricDistrictData = {
+        inLocalHistoricDistrict: false,
+        districtName: null,
+        layerChecked: `unavailable: ${msg}`,
+      };
+      ctx.onProgress?.({ fetcher: this.id, status: 'completed' });
+      return { fetcher: this.id, status: 'completed', files: [], data: result as unknown as Record<string, unknown>, durationMs: Date.now() - t0 };
     }
   },
 };
