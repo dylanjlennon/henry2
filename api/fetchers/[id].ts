@@ -75,7 +75,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  const { store, artifactStore } = await makeProvenanceStack();
+  let store: Awaited<ReturnType<typeof makeProvenanceStack>>['store'];
+  let artifactStore: Awaited<ReturnType<typeof makeProvenanceStack>>['artifactStore'];
+  try {
+    ({ store, artifactStore } = await makeProvenanceStack());
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ error: `provenance init failed: ${msg}` });
+    return;
+  }
 
   // The coordinator (Slack handler) already saved the real Invocation + Run
   // rows in Neon. Here we just need a recorder that writes FetcherCall and

@@ -1,21 +1,23 @@
 /**
- * slope — elevation and slope from Buncombe County raster services.
+ * slope — elevation and slope from USGS 3DEP (3D Elevation Program).
  *
- * Two ImageServer/identify calls (pure REST, no browser):
- *   1. DEM (Digital Elevation Model) — EPSG:2264 (NC State Plane feet)
- *      Returns elevation in US Survey Feet.
- *   2. PERCENTSLOPE — EPSG:2264 (NC State Plane feet)
- *      Returns slope as a percentage (0–100+).
+ * Queries the USGS Elevation Point Query Service for the parcel centroid and
+ * four surrounding points (~100 m in each cardinal direction). Slope is
+ * derived from the maximum elevation change across adjacent sample pairs.
  *
- * Both rasters require EPSG:2264 coordinates. The centroid is reprojected
- * via reprojectPoint() before querying.
+ * The Buncombe County DEM/PERCENTSLOPE ImageServers require an auth token
+ * and are not publicly accessible, so USGS 3DEP is the public alternative.
+ *
+ * No browser needed — pure REST.
  */
 
 import type { Fetcher, FetcherContext, FetcherResult } from '../types.js';
-import { reprojectPoint } from '../lib/coordinateTransform.js';
 
-const DEM_URL = 'https://gis.buncombecounty.org/arcgis/rest/services/base/DEM/ImageServer/identify';
-const SLOPE_URL = 'https://gis.buncombecounty.org/arcgis/rest/services/base/PERCENTSLOPE/ImageServer/identify';
+const EPQS_URL = 'https://epqs.nationalmap.gov/v1/json';
+
+// ~100 m in decimal degrees at lat 35.6°
+const DELTA_LAT = 0.0009;   // 100 m north/south
+const DELTA_LON = 0.00111;  // 100 m east/west (adjusted for latitude)
 
 export interface SlopeData {
   elevationFt: number | null;
@@ -25,9 +27,9 @@ export interface SlopeData {
 
 export const slopeFetcher: Fetcher = {
   id: 'slope',
-  name: 'Elevation & slope (Buncombe raster)',
+  name: 'Elevation & slope (USGS 3DEP)',
   counties: ['buncombe'],
-  estimatedMs: 5_000,
+  estimatedMs: 8_000,
   needsBrowser: false,
 
   async run(ctx: FetcherContext): Promise<FetcherResult> {
@@ -38,38 +40,52 @@ export const slopeFetcher: Fetcher = {
       return { fetcher: this.id, status: 'skipped', files: [], error: 'No centroid', durationMs: Date.now() - t0 };
     }
     const { lon, lat } = ctx.property.centroid;
-    const { xFt, yFt } = reprojectPoint(lon, lat);
-    const geom = `${xFt},${yFt}`;
 
-    const [elevResult, slopeResult] = await Promise.allSettled([
-      identifyRaster(DEM_URL, geom),
-      identifyRaster(SLOPE_URL, geom),
+    // Query center + 4 cardinal points to compute slope
+    const [center, north, south, east, west] = await Promise.all([
+      queryElevation(lon, lat),
+      queryElevation(lon, lat + DELTA_LAT),
+      queryElevation(lon, lat - DELTA_LAT),
+      queryElevation(lon + DELTA_LON, lat),
+      queryElevation(lon - DELTA_LON, lat),
     ]);
 
-    const elevationFt = elevResult.status === 'fulfilled' ? elevResult.value : null;
-    const slopePct = slopeResult.status === 'fulfilled' ? slopeResult.value : null;
-    const slopeDeg = slopePct !== null ? Math.round(Math.atan(slopePct / 100) * (180 / Math.PI) * 10) / 10 : null;
+    const elevationFt = center;
+
+    let slopePct: number | null = null;
+    if (center !== null && north !== null && south !== null && east !== null && west !== null) {
+      const DIST_FT = 328.084; // 100 m in feet
+      const dzNS = Math.abs(north - south) / (2 * DIST_FT);
+      const dzEW = Math.abs(east - west) / (2 * DIST_FT);
+      const gradient = Math.sqrt(dzNS * dzNS + dzEW * dzEW);
+      slopePct = Math.round(gradient * 100 * 10) / 10;
+    }
+    const slopeDeg = slopePct !== null
+      ? Math.round(Math.atan(slopePct / 100) * (180 / Math.PI) * 10) / 10
+      : null;
 
     const data: SlopeData = { elevationFt, slopePct, slopeDeg };
-
     ctx.onProgress?.({ fetcher: this.id, status: 'completed' });
     return { fetcher: this.id, status: 'completed', files: [], data: data as unknown as Record<string, unknown>, durationMs: Date.now() - t0 };
   },
 };
 
-async function identifyRaster(url: string, geom: string): Promise<number | null> {
+async function queryElevation(lon: number, lat: number): Promise<number | null> {
   const params = new URLSearchParams({
-    geometry: geom,
-    geometryType: 'esriGeometryPoint',
-    inSR: '2264',
-    returnGeometry: 'false',
-    returnCatalogItems: 'false',
-    f: 'json',
+    x: String(lon),
+    y: String(lat),
+    units: 'Feet',
+    wkid: '4326',
+    includeDate: 'false',
   });
-  const resp = await fetch(`${url}?${params}`, { signal: AbortSignal.timeout(10_000) });
-  if (!resp.ok) return null;
-  const data = await resp.json() as { value?: string; error?: unknown };
-  if (data.error || data.value === undefined) return null;
-  const val = parseFloat(data.value);
-  return isNaN(val) ? null : Math.round(val * 10) / 10;
+  try {
+    const resp = await fetch(`${EPQS_URL}?${params}`, { signal: AbortSignal.timeout(10_000) });
+    if (!resp.ok) return null;
+    const data = await resp.json() as { value?: number };
+    const v = data.value;
+    if (v === undefined || v === null || isNaN(Number(v))) return null;
+    return Math.round(Number(v) * 10) / 10;
+  } catch {
+    return null;
+  }
 }

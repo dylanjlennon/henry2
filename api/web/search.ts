@@ -176,6 +176,7 @@ async function runWebFanOut(
       results = summary.results;
     }
 
+    recorder.setFetcherResultTotals(results);
     const failed = results.filter((r) => r.status === 'failed').length;
     const completed = results.filter((r) => r.status === 'completed').length;
     if (failed > 0) runStatus = completed > 0 ? 'partial' : 'failed';

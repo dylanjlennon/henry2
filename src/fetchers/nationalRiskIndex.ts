@@ -3,39 +3,37 @@
  *
  * Source: FEMA NRI FeatureServer (census tract level).
  * Endpoint: https://services.arcgis.com/XG15cJAlne2vxtgt/arcgis/rest/services/
- *            NRI_Table_CensusTracts/FeatureServer/0/query
+ *            National_Risk_Index_Census_Tracts/FeatureServer/0/query
  *
- * Returns composite risk rating + individual hazard scores for the 18 NRI
- * hazard types. Risk ratings are FEMA's five-tier scale:
- *   Very High / Relatively High / Relatively Moderate / Relatively Low / Very Low
+ * Field naming convention: {HAZARD}_RISKS = numeric score, {HAZARD}_RISKR = rating string.
+ * (Not _SCORE/_RATNG as the 2020 NRI schema used — updated to current 2023+ field names.)
  *
- * No browser needed — pure REST.
+ * No browser needed — pure REST GET.
  */
 
 import type { Fetcher, FetcherContext, FetcherResult } from '../types.js';
 
 const NRI_URL = 'https://services.arcgis.com/XG15cJAlne2vxtgt/arcgis/rest/services/National_Risk_Index_Census_Tracts/FeatureServer/0/query';
 
-// Field suffix conventions: _RATNG = rating string, _SCORE = numeric score (0–100)
-const HAZARD_FIELDS = [
-  'AVLN',   // Avalanche
-  'CFLD',   // Coastal Flooding
-  'CWAV',   // Cold Wave
-  'DRGT',   // Drought
-  'ERQK',   // Earthquake
-  'HAIL',   // Hail
-  'HWAV',   // Heat Wave
-  'HRCN',   // Hurricane
-  'ISTM',   // Ice Storm
-  'LNDS',   // Landslide
-  'LTNG',   // Lightning
-  'RFLD',   // Riverine Flooding
-  'SWND',   // Strong Wind
-  'TRND',   // Tornado
-  'TSUN',   // Tsunami
-  'VLCN',   // Volcanic Activity
-  'WFIR',   // Wildfire
-  'WNTW',   // Winter Weather
+const HAZARD_CODES = [
+  'AVLN',  // Avalanche
+  'CFLD',  // Coastal Flooding
+  'CWAV',  // Cold Wave
+  'DRGT',  // Drought
+  'ERQK',  // Earthquake
+  'HAIL',  // Hail
+  'HWAV',  // Heat Wave
+  'HRCN',  // Hurricane
+  'IFLD',  // Inland Flooding (replaces RFLD)
+  'ISTM',  // Ice Storm
+  'LNDS',  // Landslide
+  'LTNG',  // Lightning
+  'SWND',  // Strong Wind
+  'TRND',  // Tornado
+  'TSUN',  // Tsunami
+  'VLCN',  // Volcanic Activity
+  'WFIR',  // Wildfire
+  'WNTW',  // Winter Weather
 ] as const;
 
 export interface NriHazardScore {
@@ -49,15 +47,14 @@ export interface NationalRiskIndexData {
   compositeScore: number | null;
   compositeRating: string | null;
   hazards: NriHazardScore[];
-  /** Highest-risk hazards (rating = Very High or Relatively High) */
   topHazards: string[];
 }
 
 const HAZARD_LABELS: Record<string, string> = {
   AVLN: 'Avalanche', CFLD: 'Coastal Flooding', CWAV: 'Cold Wave',
   DRGT: 'Drought', ERQK: 'Earthquake', HAIL: 'Hail', HWAV: 'Heat Wave',
-  HRCN: 'Hurricane', ISTM: 'Ice Storm', LNDS: 'Landslide', LTNG: 'Lightning',
-  RFLD: 'Riverine Flooding', SWND: 'Strong Wind', TRND: 'Tornado',
+  HRCN: 'Hurricane', IFLD: 'Inland Flooding', ISTM: 'Ice Storm',
+  LNDS: 'Landslide', LTNG: 'Lightning', SWND: 'Strong Wind', TRND: 'Tornado',
   TSUN: 'Tsunami', VLCN: 'Volcanic Activity', WFIR: 'Wildfire', WNTW: 'Winter Weather',
 };
 
@@ -78,12 +75,9 @@ export const nationalRiskIndexFetcher: Fetcher = {
     const { lon, lat } = ctx.property.centroid;
 
     try {
-      const scoreFields = HAZARD_FIELDS.map((h) => `${h}_SCORE`);
-      const ratingFields = HAZARD_FIELDS.map((h) => `${h}_RATNG`);
       const outFields = [
         'TRACTFIPS', 'RISK_SCORE', 'RISK_RATNG',
-        ...scoreFields,
-        ...ratingFields,
+        ...HAZARD_CODES.flatMap((h) => [`${h}_RISKS`, `${h}_RISKR`]),
       ].join(',');
 
       const params = new URLSearchParams({
@@ -96,26 +90,14 @@ export const nationalRiskIndexFetcher: Fetcher = {
         f: 'json',
       });
 
-      // POST to avoid URL length limit from 36+ outFields
-      const resp = await fetch(NRI_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString(),
-        signal: AbortSignal.timeout(12_000),
-      });
+      const resp = await fetch(`${NRI_URL}?${params}`, { signal: AbortSignal.timeout(12_000) });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json() as { features?: Array<{ attributes: Record<string, unknown> }>; error?: unknown };
       if (data.error) throw new Error(JSON.stringify(data.error));
 
       const feat = data.features?.[0];
       if (!feat) {
-        const result: NationalRiskIndexData = {
-          tractId: null,
-          compositeScore: null,
-          compositeRating: null,
-          hazards: [],
-          topHazards: [],
-        };
+        const result: NationalRiskIndexData = { tractId: null, compositeScore: null, compositeRating: null, hazards: [], topHazards: [] };
         ctx.onProgress?.({ fetcher: this.id, status: 'completed' });
         return { fetcher: this.id, status: 'completed', files: [], data: result as unknown as Record<string, unknown>, durationMs: Date.now() - t0 };
       }
@@ -125,10 +107,10 @@ export const nationalRiskIndexFetcher: Fetcher = {
       const compositeScore = parseNumeric(a.RISK_SCORE);
       const compositeRating = a.RISK_RATNG ? String(a.RISK_RATNG).trim() : null;
 
-      const hazards: NriHazardScore[] = HAZARD_FIELDS.map((code) => ({
+      const hazards: NriHazardScore[] = HAZARD_CODES.map((code) => ({
         hazard: HAZARD_LABELS[code] ?? code,
-        score: parseNumeric(a[`${code}_SCORE`]),
-        rating: a[`${code}_RATNG`] ? String(a[`${code}_RATNG`]).trim() : null,
+        score: parseNumeric(a[`${code}_RISKS`]),
+        rating: a[`${code}_RISKR`] ? String(a[`${code}_RISKR`]).trim() : null,
       }));
 
       const topHazards = hazards
@@ -136,13 +118,7 @@ export const nationalRiskIndexFetcher: Fetcher = {
         .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
         .map((h) => h.hazard);
 
-      const result: NationalRiskIndexData = {
-        tractId,
-        compositeScore,
-        compositeRating,
-        hazards,
-        topHazards,
-      };
+      const result: NationalRiskIndexData = { tractId, compositeScore, compositeRating, hazards, topHazards };
 
       ctx.onProgress?.({ fetcher: this.id, status: 'completed' });
       return { fetcher: this.id, status: 'completed', files: [], data: result as unknown as Record<string, unknown>, durationMs: Date.now() - t0 };

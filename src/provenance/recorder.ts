@@ -105,6 +105,13 @@ export class ProvenanceRecorder {
     await this.store.updateRun(this.run);
   }
 
+  /** Set completion totals from an external results array (used when fetchers run out-of-process). */
+  setFetcherResultTotals(results: Array<{ status: string }>): void {
+    this.totals.fetchersCompleted = results.filter((r) => r.status === 'completed').length;
+    this.totals.fetchersFailed = results.filter((r) => r.status === 'failed' || r.status === 'timeout').length;
+    this.totals.fetchersSkipped = results.filter((r) => r.status === 'skipped').length;
+  }
+
   async finishRun(opts: { status: 'completed' | 'partial' | 'failed' }): Promise<Run> {
     if (!this.run) throw new Error('Run not started');
     const finishedAt = this.now();
