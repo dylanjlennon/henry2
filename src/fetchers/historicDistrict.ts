@@ -20,6 +20,20 @@
 
 import type { Fetcher, FetcherContext, FetcherResult } from '../types.js';
 
+async function fetchWithRetry<T>(url: string, timeoutMs: number): Promise<T> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.json() as T;
+    } catch (err) {
+      if (attempt === 1) throw err;
+      await new Promise((r) => setTimeout(r, 2_000));
+    }
+  }
+  throw new Error('unreachable');
+}
+
 const ZONING_MAPSERVER = 'https://arcgis.ashevillenc.gov/arcgis/rest/services/Planning/Zoning_Overlays/MapServer';
 
 export interface HistoricDistrictData {
@@ -46,16 +60,16 @@ export const historicDistrictFetcher: Fetcher = {
     const { lon, lat } = ctx.property.centroid;
 
     try {
-      // Step 1: discover current layer ID for Historic District Overlay
-      const rootResp = await fetch(`${ZONING_MAPSERVER}?f=json`, { signal: AbortSignal.timeout(10_000) });
-      const rootData = await rootResp.json() as { layers?: Array<{ id: number; name: string }> };
+      // Step 1: discover current layer ID for Historic District Overlay (retry once on failure)
+      const rootData = await fetchWithRetry<{ layers?: Array<{ id: number; name: string }> }>(
+        `${ZONING_MAPSERVER}?f=json`, 15_000,
+      );
       const layers = rootData.layers ?? [];
       const historicLayer = layers.find((l) =>
         /historic/i.test(l.name) && /district|overlay/i.test(l.name),
       ) ?? layers.find((l) => /historic/i.test(l.name));
 
       if (!historicLayer) {
-        // Layer not found — possibly outside Asheville coverage
         const result: HistoricDistrictData = {
           inLocalHistoricDistrict: false,
           districtName: null,
@@ -64,7 +78,7 @@ export const historicDistrictFetcher: Fetcher = {
         return { fetcher: this.id, status: 'completed', files: [], data: result as unknown as Record<string, unknown>, durationMs: Date.now() - t0 };
       }
 
-      // Step 2: spatial query
+      // Step 2: spatial query (retry once on failure)
       const params = new URLSearchParams({
         geometry: `${lon},${lat}`,
         geometryType: 'esriGeometryPoint',
@@ -74,10 +88,9 @@ export const historicDistrictFetcher: Fetcher = {
         returnGeometry: 'false',
         f: 'json',
       });
-      const qResp = await fetch(`${ZONING_MAPSERVER}/${historicLayer.id}/query?${params}`, {
-        signal: AbortSignal.timeout(10_000),
-      });
-      const qData = await qResp.json() as { features?: Array<{ attributes: Record<string, unknown> }>; error?: unknown };
+      const qData = await fetchWithRetry<{ features?: Array<{ attributes: Record<string, unknown> }>; error?: unknown }>(
+        `${ZONING_MAPSERVER}/${historicLayer.id}/query?${params}`, 15_000,
+      );
       if (qData.error) throw new Error(JSON.stringify(qData.error));
 
       const feat = qData.features?.[0];

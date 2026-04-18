@@ -302,7 +302,9 @@ function renderFetcherResult(result: FetcherResult): string | null {
     const zoneLabel = floodZoneLabel(zone, inSFHA);
     const lines = [`:ocean: *FEMA flood zone* — ${zoneLabel}`];
     if (d.zoneSubtype) lines.push(`  • Subtype: ${d.zoneSubtype}`);
-    if (d.baseFloodElevation != null) lines.push(`  • Base flood elevation: ${d.baseFloodElevation} ft`);
+    const bfe = Number(d.baseFloodElevation);
+    if (d.baseFloodElevation != null && bfe > -9000) lines.push(`  • Base flood elevation: ${bfe} ft`);
+    else if (d.baseFloodElevation != null) lines.push(`  • Base flood elevation: N/A (Zone X — no BFE established)`);
     if (d.firmPanel) lines.push(`  • FIRM panel: ${d.firmPanel}`);
     if (d.firmPanelEffectiveDate) {
       const dt = new Date(d.firmPanelEffectiveDate as number);
@@ -315,8 +317,9 @@ function renderFetcherResult(result: FetcherResult): string | null {
     const onSeptic = d.onSeptic === true;
     const count = Number(d.recordCount ?? 0);
     const icon = onSeptic ? ':toilet:' : ':potable_water:';
+    const countLabel = count >= 100 ? 'records found' : count === 1 ? '1 record' : `${count} records`;
     const statusLabel = onSeptic
-      ? `On septic (${count} record${count === 1 ? '' : 's'})`
+      ? `On septic (${countLabel} in vicinity)`
       : 'No septic records — likely public sewer';
     return `${icon} *Septic / sewer* — ${statusLabel}`;
   }

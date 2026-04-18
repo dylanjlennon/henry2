@@ -70,13 +70,14 @@ export const firmetteFetcher: Fetcher = {
     if (ctx.property.centroid) {
       const { lat, lon } = ctx.property.centroid;
       try {
-        ctx.onProgress?.({ fetcher: this.id, status: 'progress', message: 'Submitting FIRMette GP job…' });
+        ctx.onProgress?.({ fetcher: this.id, status: 'progress', message: `Submitting FIRMette GP job (${lat.toFixed(5)}, ${lon.toFixed(5)})…` });
 
+        // ArcGIS GP service GPDouble params must be JSON-structured, not plain strings
         const submitResp = await fetch(`${PRINT_GP}/submitJob`, {
           method: 'POST',
           body: new URLSearchParams({
-            Latitude: String(lat),
-            Longitude: String(lon),
+            Latitude: JSON.stringify({ dataType: 'GPDouble', value: lat }),
+            Longitude: JSON.stringify({ dataType: 'GPDouble', value: lon }),
             f: 'json',
           }),
           headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Henry/2)' },

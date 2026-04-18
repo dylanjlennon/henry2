@@ -127,10 +127,25 @@ export const strEligibilityFetcher: Fetcher = {
   },
 };
 
+async function fetchJsonRetry<T>(url: string, timeoutMs: number): Promise<T> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.json() as T;
+    } catch (err) {
+      if (attempt === 1) throw err;
+      await new Promise((r) => setTimeout(r, 2_000));
+    }
+  }
+  throw new Error('unreachable');
+}
+
 async function getAshevilleZoning(lon: number, lat: number): Promise<string | null> {
-  // Discover zoning layer ID
-  const rootResp = await fetch(`${ASHEVILLE_ZONING_SERVER}?f=json`, { signal: AbortSignal.timeout(10_000) });
-  const rootData = await rootResp.json() as { layers?: Array<{ id: number; name: string }> };
+  // Discover zoning layer ID (retry on transient failure of arcgis.ashevillenc.gov)
+  const rootData = await fetchJsonRetry<{ layers?: Array<{ id: number; name: string }> }>(
+    `${ASHEVILLE_ZONING_SERVER}?f=json`, 15_000,
+  );
   const layers = rootData.layers ?? [];
   const zoningLayer = layers.find((l) => /^zoning$/i.test(l.name.trim()))
     ?? layers.find((l) => /zoning district/i.test(l.name))
@@ -147,10 +162,9 @@ async function getAshevilleZoning(lon: number, lat: number): Promise<string | nu
     returnGeometry: 'false',
     f: 'json',
   });
-  const resp = await fetch(`${ASHEVILLE_ZONING_SERVER}/${zoningLayer.id}/query?${params}`, {
-    signal: AbortSignal.timeout(10_000),
-  });
-  const data = await resp.json() as { features?: Array<{ attributes: Record<string, unknown> }>; error?: unknown };
+  const data = await fetchJsonRetry<{ features?: Array<{ attributes: Record<string, unknown> }>; error?: unknown }>(
+    `${ASHEVILLE_ZONING_SERVER}/${zoningLayer.id}/query?${params}`, 15_000,
+  );
   if (data.error) return null;
 
   const feat = data.features?.[0];
@@ -194,7 +208,7 @@ async function lookupJurisdiction(lon: number, lat: number): Promise<SimpleJuris
       returnGeometry: 'false',
       f: 'json',
     });
-    const resp = await fetch(`${JURISDICTION_URL}?${params}`, { signal: AbortSignal.timeout(10_000) });
+    const resp = await fetch(`${JURISDICTION_URL}?${params}`, { signal: AbortSignal.timeout(15_000) });
     const data = await resp.json() as { features?: Array<{ attributes: Record<string, unknown> }>; error?: unknown };
     if (data.error) throw new Error();
     const feat = data.features?.[0];

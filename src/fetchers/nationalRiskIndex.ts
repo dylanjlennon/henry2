@@ -96,7 +96,13 @@ export const nationalRiskIndexFetcher: Fetcher = {
         f: 'json',
       });
 
-      const resp = await fetch(`${NRI_URL}?${params}`, { signal: AbortSignal.timeout(12_000) });
+      // POST to avoid URL length limit from 36+ outFields
+      const resp = await fetch(NRI_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString(),
+        signal: AbortSignal.timeout(12_000),
+      });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json() as { features?: Array<{ attributes: Record<string, unknown> }>; error?: unknown };
       if (data.error) throw new Error(JSON.stringify(data.error));

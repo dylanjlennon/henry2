@@ -94,7 +94,13 @@ async function queryNeighbors(
       resultRecordCount: '20',
       f: 'json',
     });
-    const resp = await fetch(`${PARCEL_URL}?${params}`, { signal: AbortSignal.timeout(15_000) });
+    // POST to avoid URL length limit — parcel polygon geometry can be large
+    const resp = await fetch(PARCEL_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+      signal: AbortSignal.timeout(15_000),
+    });
     if (!resp.ok) return null;
     const data = await resp.json() as { features?: Array<{ attributes: Record<string, unknown> }>; error?: unknown };
     if (data.error) return null;
