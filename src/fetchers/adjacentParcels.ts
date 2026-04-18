@@ -90,8 +90,9 @@ interface RawNeighbor {
 
 async function fetchParcelPolygon(pin: string): Promise<unknown | null> {
   try {
+    // Buncombe stores 15-digit PINs (e.g. "964895428900000") but gisPin is 10 digits
     const params = new URLSearchParams({
-      where: `PIN = '${pin}'`,
+      where: `PIN LIKE '${pin}%'`,
       outFields: 'PIN',
       returnGeometry: 'true',
       outSR: '4326',
@@ -176,7 +177,7 @@ function parseNeighborFeatures(
         centroidLat: f.centroid?.y ?? null,
       };
     })
-    .filter((n) => n.pin && n.pin !== selfPin && n.owner);
+    .filter((n) => n.pin && !n.pin.startsWith(selfPin) && n.owner);
 }
 
 async function enrichWithZoning(neighbors: RawNeighbor[]): Promise<AdjacentParcel[]> {
