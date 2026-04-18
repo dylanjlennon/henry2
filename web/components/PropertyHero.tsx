@@ -4,7 +4,7 @@ import React, { useCallback } from 'react';
 import Pill from '@/components/Pill';
 import type {
   WebRunStatus,
-  ParcelData,
+  ParcelJsonData,
   JurisdictionData,
   HistoricDistrictData,
   STREligibilityData,
@@ -55,27 +55,47 @@ function CopyableText({ text, label }: { text: string; label: string }) {
   );
 }
 
-function formatCurrency(value: number | null): string {
-  if (value === null) return '—';
+function formatCurrencyFromString(value: string | undefined | null): string {
+  if (!value) return '—';
+  const num = parseFloat(value);
+  if (isNaN(num)) return '—';
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
     maximumFractionDigits: 0,
-  }).format(value);
+  }).format(num);
 }
 
-function formatNumber(value: number | null): string {
-  if (value === null) return '—';
-  return new Intl.NumberFormat('en-US').format(value);
+function titleCase(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/(?:^|\s)\S/g, (c) => c.toUpperCase());
+}
+
+function formatOwner(owner: string | undefined): string {
+  if (!owner) return '';
+  return titleCase(owner.replace(/;/g, ' & '));
 }
 
 export default function PropertyHero({ runStatus }: PropertyHeroProps) {
-  const parcel = runStatus.fetcherData['parcel-json'] as unknown as ParcelData | undefined;
+  const parcelJson = runStatus.fetcherData['parcel-json'] as unknown as ParcelJsonData | undefined;
+  const attrs = parcelJson?.attributes;
   const jurisdiction = runStatus.fetcherData['jurisdiction'] as unknown as JurisdictionData | undefined;
   const historic = runStatus.fetcherData['historic-district'] as unknown as HistoricDistrictData | undefined;
   const str = runStatus.fetcherData['str-eligibility'] as unknown as STREligibilityData | undefined;
 
-  const isLoading = !parcel;
+  const isLoading = !attrs;
+
+  const addressLine = attrs
+    ? `${attrs.Address}, ${attrs.CityName} NC ${attrs.Zipcode}`
+    : runStatus.address;
+
+  const ownerDisplay = formatOwner(attrs?.Owner);
+  const pin = runStatus.pin ?? attrs?.PIN ?? null;
+  const acreage = attrs?.Acreage;
+  const taxValue = attrs?.TaxValue;
+  const subName = attrs?.SubName;
+  const deedRef = attrs ? `Book ${attrs.DeedBook} / Page ${attrs.DeedPage}` : null;
 
   return (
     <div
@@ -90,17 +110,6 @@ export default function PropertyHero({ runStatus }: PropertyHeroProps) {
         <div style={{ marginBottom: '4px' }}>
           {isLoading ? (
             <SkeletonBar width="60%" />
-          ) : parcel?.address ? (
-            <h1
-              style={{
-                fontSize: 'var(--font-size-heading)',
-                fontWeight: 500,
-                margin: 0,
-                lineHeight: '28px',
-              }}
-            >
-              <CopyableText text={parcel.address} label="address" />
-            </h1>
           ) : (
             <h1
               style={{
@@ -108,10 +117,9 @@ export default function PropertyHero({ runStatus }: PropertyHeroProps) {
                 fontWeight: 500,
                 margin: 0,
                 lineHeight: '28px',
-                color: 'var(--color-muted)',
               }}
             >
-              {runStatus.address}
+              <CopyableText text={addressLine} label="address" />
             </h1>
           )}
         </div>
@@ -128,13 +136,13 @@ export default function PropertyHero({ runStatus }: PropertyHeroProps) {
             <SkeletonBar width="40%" />
           ) : (
             <>
-              {parcel?.pin && (
+              {pin && (
                 <>
-                  PIN: <CopyableText text={parcel.pin} label="PIN" />
-                  {parcel?.owner && ' · '}
+                  PIN: <CopyableText text={pin} label="PIN" />
+                  {ownerDisplay && ' · '}
                 </>
               )}
-              {parcel?.owner && <span>{parcel.owner}</span>}
+              {ownerDisplay && <span>{ownerDisplay}</span>}
             </>
           )}
         </div>
@@ -159,42 +167,41 @@ export default function PropertyHero({ runStatus }: PropertyHeroProps) {
             </>
           ) : (
             <>
-              {parcel?.acreage != null && (
+              {ownerDisplay && (
                 <span>
                   <span style={{ color: 'var(--color-ink)', fontWeight: 500 }}>
-                    {parcel.acreage.toFixed(2)}
+                    {ownerDisplay}
+                  </span>
+                </span>
+              )}
+              {acreage != null && (
+                <span>
+                  <span style={{ color: 'var(--color-ink)', fontWeight: 500 }}>
+                    {acreage.toFixed(2)}
                   </span>{' '}
                   ac
                 </span>
               )}
-              {parcel?.sqFt != null && (
-                <span>
-                  <span style={{ color: 'var(--color-ink)', fontWeight: 500 }}>
-                    {formatNumber(parcel.sqFt)}
-                  </span>{' '}
-                  sq ft
-                </span>
-              )}
-              {parcel?.yearBuilt != null && (
-                <span>
-                  Built{' '}
-                  <span style={{ color: 'var(--color-ink)', fontWeight: 500 }}>
-                    {parcel.yearBuilt}
-                  </span>
-                </span>
-              )}
-              {parcel?.taxValue != null && (
+              {taxValue && (
                 <span>
                   Tax value{' '}
                   <span style={{ color: 'var(--color-ink)', fontWeight: 500 }}>
-                    {formatCurrency(parcel.taxValue)}
+                    {formatCurrencyFromString(taxValue)}
                   </span>
                 </span>
               )}
-              {parcel?.municipality && (
+              {deedRef && (
+                <span>
+                  Deed{' '}
+                  <span style={{ color: 'var(--color-ink)', fontWeight: 500 }}>
+                    {deedRef}
+                  </span>
+                </span>
+              )}
+              {subName && (
                 <span>
                   <span style={{ color: 'var(--color-ink)', fontWeight: 500 }}>
-                    {parcel.municipality}
+                    {titleCase(subName)}
                   </span>
                 </span>
               )}

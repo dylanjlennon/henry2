@@ -2,14 +2,24 @@
 
 import React from 'react';
 import { ArrowUpRight } from 'lucide-react';
+import type { WebRunStatus } from '@/types/property';
 
-interface ActionButton {
-  label: string;
-  onClick: () => void;
+const BACKEND_BASE = 'https://henry-slack.vercel.app';
+
+interface ActionRowProps {
+  artifacts: WebRunStatus['artifacts'];
 }
 
-export default function ActionRow() {
-  const actions: ActionButton[] = [
+export default function ActionRow({ artifacts }: ActionRowProps) {
+  const pdfArtifacts = artifacts.filter((a) => a.contentType === 'application/pdf');
+
+  const handleDownloadAll = () => {
+    pdfArtifacts.forEach((a) => {
+      window.open(`${BACKEND_BASE}/api/artifact/${a.id}`, '_blank');
+    });
+  };
+
+  const actions = [
     {
       label: 'Draft MLS remarks',
       onClick: () => console.log('Draft MLS remarks'),
@@ -23,8 +33,8 @@ export default function ActionRow() {
       onClick: () => console.log('Find comps'),
     },
     {
-      label: 'Export PDF',
-      onClick: () => window.print(),
+      label: 'Download All PDFs',
+      onClick: handleDownloadAll,
     },
   ];
 

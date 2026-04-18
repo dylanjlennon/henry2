@@ -39,8 +39,44 @@ export interface SlopeData {
 
 export interface FemaFloodData {
   floodZone: string | null;
-  sfha: boolean | null;
+  zoneSubtype: string | null;
+  sfha?: boolean | null;
   firmPanel: string | null;
+  firmPanelType: string | null;
+  depth?: number;
+  artifactId?: string;
+}
+
+export interface ParcelAttributes {
+  PIN: string;
+  Owner: string;
+  Address: string;
+  CityName: string;
+  Zipcode: string;
+  Acreage: number;
+  TaxValue: string;
+  LandValue: string;
+  BuildingValue: string;
+  DeedBook: string;
+  DeedPage: string;
+  DeedDate: string;
+  PlatBook: string;
+  PlatPage: string;
+  PropCard: string;
+  SubName: string;
+  [key: string]: unknown;
+}
+
+export interface ParcelJsonData {
+  attributes: ParcelAttributes;
+  centroid: { lat: number; lon: number };
+  artifactId?: string;
+}
+
+export interface SepticData {
+  onSeptic: boolean;
+  recordCount: number;
+  artifactId?: string;
 }
 
 export interface STREligibilityData {
@@ -83,6 +119,7 @@ export interface WebRunStatus {
   status: 'running' | 'completed' | 'failed' | 'partial';
   address: string;
   pin: string | null;
+  ownerName: string | null;
   fetchersPlanned: number;
   fetchersCompleted: number;
   fetchersFailed: number;
