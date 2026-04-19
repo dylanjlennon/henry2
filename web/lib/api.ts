@@ -8,7 +8,14 @@ export async function startSearch(address: string): Promise<{ runId: string }> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ address }),
   });
-  if (!res.ok) throw new Error(`Search failed: ${res.status}`);
+  if (!res.ok) {
+    let message = `Search failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { error?: string };
+      if (body.error) message = body.error;
+    } catch { /* ignore parse failure */ }
+    throw new Error(message);
+  }
   return res.json() as Promise<{ runId: string }>;
 }
 

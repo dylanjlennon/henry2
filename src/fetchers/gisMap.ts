@@ -158,24 +158,34 @@ export const gisMapFetcher: Fetcher = {
         bytes = Buffer.from(await page.screenshot({ type: 'png', fullPage: false }));
       }
 
-      // Step 11: Embed screenshot PNG into a landscape PDF via page.pdf()
-      // We create a temporary data-URL page so page.pdf() captures the image
-      // without switching to print mode on the live GIS map.
+      // Step 11: Embed screenshot PNG into a landscape PDF.
+      // Uses a separate in-memory page so page.pdf() captures the image without
+      // switching print mode on the live GIS map (which shifts the viewport).
       let pdfBytes: Buffer;
       try {
         const base64 = bytes.toString('base64');
         const htmlPage = await browser.newPage();
-        await htmlPage.setContent(
-          `<html><body style="margin:0;padding:0;background:#000">` +
-          `<img src="data:image/png;base64,${base64}" style="width:100%;height:auto"/>` +
-          `</body></html>`,
-          { waitUntil: 'load' },
-        );
-        pdfBytes = Buffer.from(await htmlPage.pdf({ format: 'A3', landscape: true, printBackground: true }));
-        await htmlPage.close();
-      } catch {
-        // Ultimate fallback: PDF from the live map page
-        pdfBytes = Buffer.from(await page.pdf({ format: 'A3', landscape: true, printBackground: true }));
+        try {
+          await htmlPage.setContent(
+            `<html><body style="margin:0;padding:0;background:#000">` +
+            `<img src="data:image/png;base64,${base64}" style="width:100%;height:auto"/>` +
+            `</body></html>`,
+            { waitUntil: 'load' },
+          );
+          pdfBytes = Buffer.from(await htmlPage.pdf({ format: 'A3', landscape: true, printBackground: true }));
+        } finally {
+          await htmlPage.close().catch(() => {});
+        }
+      } catch (pdfErr) {
+        // If the helper page failed (e.g. browser closed by AbortSignal), try
+        // a direct PDF from the live map page as a last resort.
+        try {
+          pdfBytes = Buffer.from(await page.pdf({ format: 'A3', landscape: true, printBackground: true }));
+        } catch {
+          // Both attempts failed — rethrow the original error with context
+          const msg = pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
+          throw new Error(`PDF generation failed (browser may have closed): ${msg}`);
+        }
       }
 
       const filename = `gis-map-${ctx.property.gisPin}.pdf`;

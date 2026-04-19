@@ -112,10 +112,20 @@ export const PropertySnapshot = z.object({
 });
 export type PropertySnapshot = z.infer<typeof PropertySnapshot>;
 
+/** Passive browser signals captured server-side on web invocations. */
+export const InvocationMetadata = z.object({
+  userAgent: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  referer: z.string().nullable().optional(),
+  acceptLanguage: z.string().nullable().optional(),
+}).optional();
+export type InvocationMetadata = z.infer<typeof InvocationMetadata>;
+
 /** What triggered a run: who, where, how. */
 export const Invocation = z.object({
   id: z.string().uuid(),
-  trigger: z.enum(['slack-slash', 'slack-mention', 'api', 'cli', 'scheduled', 'web']),
+  trigger: z.enum(['slack-slash', 'slack-mention', 'api', 'cli', 'scheduled', 'web', 'email']),
   slackTeamId: z.string().nullable(),
   slackUserId: z.string().nullable(),
   slackChannelId: z.string().nullable(),
@@ -126,6 +136,8 @@ export const Invocation = z.object({
   createdAt: z.string().datetime(),
   /** SHA-256 of client IP — web-only, null for Slack/CLI invocations. */
   ipHash: z.string().nullable().optional(),
+  /** Passive browser signals from request headers — web-only. */
+  metadata: InvocationMetadata,
 });
 export type Invocation = z.infer<typeof Invocation>;
 

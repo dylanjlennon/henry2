@@ -59,6 +59,7 @@ export class MemoryProvenanceStore implements ProvenanceStore {
   async getWebRunStatus(_runId: string): Promise<WebRunStatus | null> { return null; }
   async listWebRuns(_opts?: { limit?: number; cursor?: string }): Promise<WebRunRow[]> { return []; }
   async countRecentWebRunsByIp(_ipHash: string, _sinceMs: number): Promise<number> { return 0; }
+  async countRecentEmailRunsBySender(_senderHash: string, _sinceMs: number): Promise<number> { return 0; }
 }
 
 /** Filesystem-backed artifact store. Writes to `${root}/${runId}/${filename}`. */

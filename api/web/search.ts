@@ -44,6 +44,17 @@ function hashIp(req: VercelRequest): string {
   return createHash('sha256').update(raw).digest('hex');
 }
 
+function collectMetadata(req: VercelRequest) {
+  const h = (key: string) => (req.headers[key] as string | undefined) ?? null;
+  return {
+    userAgent: h('user-agent'),
+    country: h('x-vercel-ip-country'),
+    city: h('x-vercel-ip-city'),
+    referer: h('referer') ?? h('referrer'),
+    acceptLanguage: h('accept-language'),
+  };
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'method not allowed' });
@@ -58,6 +69,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   const ipHash = hashIp(req);
+  const metadata = collectMetadata(req);
   const stack = await makeProvenanceStack();
 
   // Rate limiting
@@ -97,6 +109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     rawInput: address,
     createdAt: new Date().toISOString(),
     ipHash,
+    metadata,
   };
   const recorder = new ProvenanceRecorder({
     store: stack.store,

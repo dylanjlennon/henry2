@@ -2,26 +2,39 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Henry</title>
+  <title>Henry — Buncombe County Property Research</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body{font-family:-apple-system,system-ui,sans-serif;max-width:640px;margin:4rem auto;padding:0 1rem;color:#222;line-height:1.5}
-    code{background:#f4f4f4;padding:2px 6px;border-radius:3px}
-    h1{font-weight:600}
-    a{color:#0366d6}
+    body{font-family:-apple-system,system-ui,sans-serif;max-width:640px;margin:4rem auto;padding:0 1rem;color:#222;line-height:1.6}
+    code{background:#f4f4f4;padding:2px 6px;border-radius:3px;font-size:13px}
+    h1{font-weight:600;margin-bottom:4px}
+    h2{font-weight:600;font-size:15px;margin:24px 0 8px;color:#555}
+    a{color:#2563eb}
+    .badge{display:inline-block;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;font-size:12px;padding:2px 8px;border-radius:4px;font-weight:500;margin-left:8px}
+    ul{margin:0;padding-left:20px}
+    li{margin:4px 0}
   </style>
 </head>
 <body>
-  <h1>Henry</h1>
-  <p>Slack-native property research for Buncombe County, NC.</p>
-  <p>This host serves Slack webhooks and a run-trace API — there is no public UI.</p>
+  <h1>Henry <span class="badge">v2</span></h1>
+  <p>Buncombe County property research — resolves any address or PIN, runs 12 parallel fetchers across public data sources, delivers documents in ~2 minutes.</p>
+
+  <h2>Web UI</h2>
+  <p><a href="https://henry-web-inky.vercel.app">henry-web-inky.vercel.app</a> — search any address, get the full report.</p>
+
+  <h2>API</h2>
   <ul>
-    <li><code>POST /api/slack/command</code> — slash command handler</li>
-    <li><code>POST /api/slack/events</code> — Slack events (app mentions)</li>
-    <li><code>GET  /api/runs</code> — recent run list (auth required)</li>
-    <li><code>GET  /api/runs/:id</code> — single run trace (auth required)</li>
-    <li><code>POST /api/fetchers/:id</code> — isolated fan-out executor (internal)</li>
-    <li><code>GET  /api/artifact/:id</code> — artifact byte proxy (auth required)</li>
+    <li><code>POST /api/web/search</code> — resolve address + start run, returns <code>runId</code></li>
+    <li><code>GET  /api/web/status/:id</code> — poll run progress + fetcher results</li>
+    <li><code>GET  /api/web/history</code> — recent runs</li>
+    <li><code>POST /api/slack/command</code> — Slack slash command handler</li>
+    <li><code>POST /api/slack/events</code> — Slack app mentions</li>
+    <li><code>POST /api/fetchers/:id</code> — isolated fetcher executor (internal)</li>
+    <li><code>GET  /api/artifact/:id</code> — artifact byte proxy</li>
+    <li><code>POST /api/email/inbound</code> — Postmark inbound webhook</li>
   </ul>
+
+  <h2>Coverage</h2>
+  <p>Buncombe County, NC only. Street addresses and 15-digit PINs both work.</p>
 </body>
 </html>

@@ -46,8 +46,8 @@ export class PostgresProvenanceStore implements ProvenanceStore {
     await this.pool.query(
       `INSERT INTO invocations (
          id, trigger, slack_team_id, slack_user_id, slack_channel_id,
-         slack_channel_name, slack_thread_ts, raw_input, created_at, ip_hash
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         slack_channel_name, slack_thread_ts, raw_input, created_at, ip_hash, metadata
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        ON CONFLICT (id) DO UPDATE SET
          trigger = EXCLUDED.trigger,
          slack_team_id = EXCLUDED.slack_team_id,
@@ -56,11 +56,13 @@ export class PostgresProvenanceStore implements ProvenanceStore {
          slack_channel_name = EXCLUDED.slack_channel_name,
          slack_thread_ts = EXCLUDED.slack_thread_ts,
          raw_input = EXCLUDED.raw_input,
-         ip_hash = EXCLUDED.ip_hash`,
+         ip_hash = EXCLUDED.ip_hash,
+         metadata = EXCLUDED.metadata`,
       [
         inv.id, inv.trigger, inv.slackTeamId, inv.slackUserId, inv.slackChannelId,
         inv.slackChannelName, inv.slackThreadTs, inv.rawInput, inv.createdAt,
         inv.ipHash ?? null,
+        inv.metadata != null ? JSON.stringify(inv.metadata) : null,
       ],
     );
   }
@@ -323,6 +325,16 @@ export class PostgresProvenanceStore implements ProvenanceStore {
       `SELECT COUNT(*) AS cnt FROM invocations
        WHERE trigger = 'web' AND ip_hash = $1 AND created_at > $2`,
       [ipHash, since],
+    );
+    return Number(res.rows[0]?.cnt ?? 0);
+  }
+
+  async countRecentEmailRunsBySender(senderHash: string, sinceMs: number): Promise<number> {
+    const since = new Date(Date.now() - sinceMs).toISOString();
+    const res = await this.pool.query(
+      `SELECT COUNT(*) AS cnt FROM invocations
+       WHERE trigger = 'email' AND ip_hash = $1 AND created_at > $2`,
+      [senderHash, since],
     );
     return Number(res.rows[0]?.cnt ?? 0);
   }

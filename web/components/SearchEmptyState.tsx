@@ -29,13 +29,13 @@ function useNavigateToSearch() {
 function HistoryCard({ address, status, startedAt, runId }: {
   address: string; status: string; startedAt: string; runId: string;
 }) {
-  const navigate = useNavigateToSearch();
+  const router = useRouter();
   const timeAgo = getTimeAgo(startedAt);
   const dotColor = status === 'completed' ? 'var(--color-calm)' : status === 'failed' ? 'var(--color-risk)' : 'var(--color-warn)';
 
   return (
     <button
-      onClick={() => void navigate(address)}
+      onClick={() => router.push(`/property/${runId}`)}
       style={{
         display: 'block',
         width: '100%',
@@ -102,21 +102,25 @@ function HeroSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   const handleSubmit = useCallback(async () => {
     const trimmed = value.trim();
     if (!trimmed || isSearching) return;
     setIsSearching(true);
+    setSearchError(null);
     try {
       const { runId } = await startSearch(trimmed);
       router.push(`/property/${runId}`);
     } catch (err) {
-      console.error('Search failed', err);
+      const msg = err instanceof Error ? err.message : 'Search failed. Please try again.';
+      setSearchError(msg);
       setIsSearching(false);
     }
   }, [value, isSearching, router]);
 
   return (
+    <>
     <div style={{
       display: 'flex',
       gap: '8px',
@@ -178,6 +182,19 @@ function HeroSearch() {
         {isSearching ? 'Searching…' : 'Search'}
       </button>
     </div>
+    {searchError && (
+      <p style={{
+        color: 'var(--color-risk)',
+        fontSize: '13px',
+        textAlign: 'center',
+        maxWidth: '560px',
+        margin: '10px auto 0',
+        lineHeight: '1.5',
+      }}>
+        {searchError}
+      </p>
+    )}
+    </>
   );
 }
 

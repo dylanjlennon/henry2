@@ -39,6 +39,7 @@ export interface ProvenanceStore {
   getWebRunStatus(runId: string): Promise<WebRunStatus | null>;
   listWebRuns(opts?: { limit?: number; cursor?: string }): Promise<WebRunRow[]>;
   countRecentWebRunsByIp(ipHash: string, sinceMs: number): Promise<number>;
+  countRecentEmailRunsBySender(senderHash: string, sinceMs: number): Promise<number>;
 }
 
 /** Compact status object for the web UI polling endpoint. */
